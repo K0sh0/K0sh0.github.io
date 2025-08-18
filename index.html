@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Street View Globe Guessing Game — Ports Mode (15 miles, Toggle Map Overlaid)</title>
+  <title>Street View Globe Guessing Game — Ports Mode (15 miles, Map Toggle + Leaderboard)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
@@ -54,11 +54,7 @@
       box-shadow:0 10px 30px rgba(0,0,0,.45)
     }
     #toggleMapBtn:hover{transform:translateY(-2px)}
-    /* When map is hidden, button hugs the corner of the viewport */
-    .mapHidden #toggleMapBtn{
-      position:absolute;right:16px;bottom:16px;z-index:8;
-    }
-
+    .mapHidden #toggleMapBtn{position:absolute;right:16px;bottom:16px;z-index:8;}
     /* Controls */
     .controls{
       position:absolute;left:50%;transform:translateX(-50%);
@@ -76,7 +72,6 @@
     button:disabled{opacity:.5;cursor:not-allowed}
     .secondary{background:#22274f;color:#e5e7eb;border:1px solid rgba(255,255,255,.08)}
     .hint{font-size:13px;color:var(--muted);padding:0 8px}
-
     /* Result overlay */
     #result{
       position:absolute;inset:0;z-index:8;display:none;
@@ -101,11 +96,24 @@
     .footerHelp{
       position:absolute;right:16px;top:16px;z-index:5;font-size:12px;color:#b9c3d6;opacity:.9
     }
+    /* Leaderboard card */
+    #leaderboard{
+      position:absolute;left:16px;bottom:16px;z-index:9;
+      padding:12px 14px;border-radius:14px;background:rgba(6,10,28,.6);
+      border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);
+      min-width:260px;max-width:320px;
+      box-shadow:0 14px 40px rgba(0,0,0,.45)
+    }
+    #leaderboard h3{margin:0 0 8px 0;font-size:14px;letter-spacing:.3px}
+    #boardList{font-size:13px;line-height:1.5}
+    .row{display:flex;justify-content:space-between;padding:2px 0}
+    .me{color:#bfe7ff}
+    .small{font-size:12px;color:#9fb1c9;margin-top:6px}
     @media (max-width:720px){
       #globeWrap{width:75vw;height:38vh}
       .controls{left:auto;right:16px;transform:none}
-      /* Keep overlay button on top-right of the map area */
       #toggleMapBtn{right:16px;bottom:16px}
+      #leaderboard{left:16px;right:auto;bottom:16px}
     }
   </style>
 </head>
@@ -125,6 +133,13 @@
     </div>
     <!-- Toggle button OVER the map -->
     <button id="toggleMapBtn" aria-pressed="false" aria-controls="globeWrap" title="Hide mini map">Hide Map</button>
+
+    <!-- Leaderboard -->
+    <div id="leaderboard">
+      <h3>🏆 Leaderboard (Top 10)</h3>
+      <div id="boardList">Loading…</div>
+      <div class="small">Scores reset by age as your DB grows.</div>
+    </div>
 
     <div class="footerHelp">Tip: You can move around in Street View before guessing.</div>
 
@@ -168,6 +183,64 @@
     const roundMax = 5;
     let loadingNew = false;
     let miniMapVisible = true;
+
+    /* ======= Supabase (fill these with your project details) ======= */
+    const SUPABASE_URL = "https://ckajnizstineqlvwmelc.supabase.co"; // <-- replace
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrYWpuaXpzdGluZXFsdndtZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0NzY3OTUsImV4cCI6MjA3MTA1Mjc5NX0.UbexwbgzhICpCw5tUlwKH-sRvx6aFBWXOBFYbycbUKw"; // <-- replace (anon public)
+    const TOP_LIMIT = 10;
+
+    async function sbFetch(path, init={}){
+      const headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        ...init.headers
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...init, headers });
+      if(!res.ok){
+        const t = await res.text().catch(()=> "error");
+        throw new Error(t);
+      }
+      return res.json();
+    }
+    async function saveScore(name, points){
+      // sanitize on client too
+      name = (name||"").trim().slice(0,24);
+      const safePoints = Math.max(0, Math.min(5000, Math.round(points||0)));
+      return sbFetch("scores", { method:"POST", body: JSON.stringify([{ name, points: safePoints }]) });
+    }
+    async function getTopScores(limit=TOP_LIMIT){
+      // order=points.desc,created_at.desc
+      const params = new URLSearchParams({
+        select:"*",
+        order:"points.desc,created_at.desc",
+        limit:String(limit)
+      }).toString();
+      return sbFetch(`scores?${params}`);
+    }
+    function renderLeaderboard(list, highlightName = null){
+      const el = document.getElementById("boardList");
+      if(!Array.isArray(list) || list.length===0){
+        el.innerHTML = "<div class='small'>No scores yet. Be the first!</div>";
+        return;
+      }
+      el.innerHTML = list.map((r,i)=>{
+        const you = highlightName && r.name === highlightName ? " me" : "";
+        const safeName = escapeHtml(r.name || "—");
+        return `<div class="row${you}"><span>${i+1}. ${safeName}</span><b>${r.points}</b></div>`;
+      }).join("");
+    }
+    function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+
+    async function refreshLeaderboard(highlightName=null){
+      try{
+        const list = await getTopScores(TOP_LIMIT);
+        renderLeaderboard(list, highlightName);
+      }catch(e){
+        console.error("Leaderboard load failed", e);
+        document.getElementById("boardList").textContent = "Leaderboard unavailable.";
+      }
+    }
 
     /* ======= Ports (provided list) ======= */
     const PORTS = [
@@ -491,6 +564,23 @@
         setStatus('Game over! Start a new game?');
         document.getElementById('btnNew').style.display = 'inline-block';
         document.getElementById('btnGuess').disabled = true;
+
+        // === Leaderboard save flow ===
+        setTimeout(async () => {
+          try{
+            // Fetch current top to show progress; then prompt
+            await refreshLeaderboard();
+            const suggested = localStorage.getItem("playerName") || "";
+            const name = prompt("Enter a name for the leaderboard (max 24 chars):", suggested) || "";
+            const trimmed = name.trim().slice(0,24);
+            if(trimmed){
+              localStorage.setItem("playerName", trimmed);
+              try{ await saveScore(trimmed, totalScore); } catch(e){ console.error("Save failed:", e); }
+              await refreshLeaderboard(trimmed);
+            }
+          }catch(e){ console.error(e); }
+        }, 50);
+
       } else {
         roundNow++;
         document.getElementById('roundNow').textContent = roundNow.toString();
@@ -591,6 +681,7 @@
 
       // First load
       prepareNextRound();
+      refreshLeaderboard();
     }
 
     /* ======= Global init callback for Google Maps loader ======= */
