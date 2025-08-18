@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Street View Globe Guessing Game</title>
+  <title>Street View Globe Guessing Game — Ports Mode (15 miles, Toggle Map Overlaid)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
@@ -44,6 +44,21 @@
       position:absolute;left:10px;top:10px;z-index:7;
       padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.45);color:#cfe9ff;border:1px solid rgba(255,255,255,.08);font-size:12px
     }
+    /* Toggle button — OVER the map (overlay) */
+    #toggleMapBtn{
+      position:absolute;right:24px;bottom:24px;z-index:8;
+      appearance:none;border:none;cursor:pointer;
+      padding:10px 12px;border-radius:999px;font-weight:800;
+      color:#0b1020;background:var(--accent);transition:.2s transform, .2s opacity;
+      border:1px solid rgba(125,211,252,.3);
+      box-shadow:0 10px 30px rgba(0,0,0,.45)
+    }
+    #toggleMapBtn:hover{transform:translateY(-2px)}
+    /* When map is hidden, button hugs the corner of the viewport */
+    .mapHidden #toggleMapBtn{
+      position:absolute;right:16px;bottom:16px;z-index:8;
+    }
+
     /* Controls */
     .controls{
       position:absolute;left:50%;transform:translateX(-50%);
@@ -59,7 +74,9 @@
     }
     button:hover{transform:translateY(-1px)}
     button:disabled{opacity:.5;cursor:not-allowed}
+    .secondary{background:#22274f;color:#e5e7eb;border:1px solid rgba(255,255,255,.08)}
     .hint{font-size:13px;color:var(--muted);padding:0 8px}
+
     /* Result overlay */
     #result{
       position:absolute;inset:0;z-index:8;display:none;
@@ -81,13 +98,14 @@
     .distance{font-size:14px;color:#cfe9ff;opacity:.9}
     .rounds{font-size:12px;color:var(--muted)}
     .pill{padding:6px 10px;border-radius:999px;background:#0f1330;border:1px solid rgba(255,255,255,.08);color:#bfe7ff;font-weight:600}
-    .secondary{background:#22274f;color:#e5e7eb;border:1px solid rgba(255,255,255,.08)}
     .footerHelp{
       position:absolute;right:16px;top:16px;z-index:5;font-size:12px;color:#b9c3d6;opacity:.9
     }
     @media (max-width:720px){
       #globeWrap{width:75vw;height:38vh}
       .controls{left:auto;right:16px;transform:none}
+      /* Keep overlay button on top-right of the map area */
+      #toggleMapBtn{right:16px;bottom:16px}
     }
   </style>
 </head>
@@ -100,10 +118,13 @@
       <div class="chip"><span class="dot yellow"></span><span class="label">Total</span> <span id="totalScore">0</span> pts</div>
     </div>
 
+    <!-- Mini-map wrapper -->
     <div id="globeWrap">
       <div id="globeHeader">Click the globe to place your guess</div>
       <div id="globe"></div>
     </div>
+    <!-- Toggle button OVER the map -->
+    <button id="toggleMapBtn" aria-pressed="false" aria-controls="globeWrap" title="Hide mini map">Hide Map</button>
 
     <div class="footerHelp">Tip: You can move around in Street View before guessing.</div>
 
@@ -146,34 +167,182 @@
     let roundNow = 1;
     const roundMax = 5;
     let loadingNew = false;
+    let miniMapVisible = true;
+
+    /* ======= Ports (provided list) ======= */
+    const PORTS = [
+      {name:'Acapulco, Mexico', lng:-99.8815, lat:16.8636},
+      {name:'Ålesund, Norway', lng:6.1549, lat:62.4722},
+      {name:'Amsterdam, Netherlands', lng:4.9041, lat:52.3676},
+      {name:'Ashdod, Israel', lng:34.6435, lat:31.8014},
+      {name:'Astoria, Oregon', lng:-123.8313, lat:46.1879},
+      {name:'Athens/Piraeus, Greece', lng:23.6460, lat:37.9420},
+      {name:'Barcelona, Spain', lng:2.1686, lat:41.3874},
+      {name:'Bar Harbor, Maine', lng:-68.2039, lat:44.3876},
+      {name:'Basseterre, St. Kitts', lng:-62.7177, lat:17.3026},
+      {name:'Belize City, Belize', lng:-88.1962, lat:17.5046},
+      {name:'Bergen, Norway', lng:5.3221, lat:60.3913},
+      {name:'Boston, Massachusetts', lng:-71.0589, lat:42.3601},
+      {name:'Bridgetown, Barbados', lng:-59.6167, lat:13.0975},
+      {name:'Brisbane, Australia', lng:153.0251, lat:-27.4698},
+      {name:'Cabo San Lucas, Mexico', lng:-109.9167, lat:22.8905},
+      {name:'Cairns, Australia', lng:145.7703, lat:-16.9203},
+      {name:'Cam Ranh, Vietnam', lng:109.2207, lat:11.9020},
+      {name:'Cannes, France', lng:7.0174, lat:43.5528},
+      {name:'Cartagena, Colombia', lng:-75.4794, lat:10.3910},
+      {name:'Castries, St. Lucia', lng:-60.9875, lat:14.0101},
+      {name:'Charlottetown, Prince Edward Island', lng:-63.1311, lat:46.2382},
+      {name:'Charlotte Amalie, St. Thomas (USVI)', lng:-64.9320, lat:18.3419},
+      {name:'Copenhagen, Denmark', lng:12.5683, lat:55.6761},
+      {name:'Corfu, Greece', lng:19.9217, lat:39.6243},
+      {name:'Costa Maya (Mahahual), Mexico', lng:-87.7090, lat:18.7130},
+      {name:'Cozumel, Mexico', lng:-86.9223, lat:20.4220},
+      {name:'Dublin, Ireland', lng:-6.2603, lat:53.3498},
+      {name:'Dubrovnik, Croatia', lng:18.0944, lat:42.6507},
+      {name:'Freeport (Grand Bahama), Bahamas', lng:-78.7000, lat:26.5333},
+      {name:'Funchal (Madeira), Portugal', lng:-16.9241, lat:32.6669},
+      {name:'Gaspé, Québec', lng:-64.4819, lat:48.8302},
+      {name:'George Town, Grand Cayman', lng:-81.3673, lat:19.2866},
+      {name:'Glasgow/Greenock, Scotland', lng:-4.7693, lat:55.9563},
+      {name:'Grand Turk, Turks & Caicos', lng:-71.1389, lat:21.4675},
+      {name:'Great Stirrup Cay, Bahamas', lng:-77.8860, lat:25.8170},
+      {name:'Hạ Long Bay (Hòn Gai), Vietnam', lng:107.0730, lat:20.9550},
+      {name:'Hakodate, Japan', lng:140.7288, lat:41.7687},
+      {name:'Halifax, Nova Scotia', lng:-63.5752, lat:44.6488},
+      {name:'Harvest Caye, Belize', lng:-88.1886, lat:16.4550},
+      {name:'Hilo (Hawaiʻi), Hawaii', lng:-155.0818, lat:19.7077},
+      {name:'Honolulu (Oʻahu), Hawaii', lng:-157.8583, lat:21.3069},
+      {name:'Hososhima (Hyuga), Japan', lng:131.6530, lat:32.4300},
+      {name:'Huatulco, Mexico', lng:-96.1263, lat:15.7683},
+      {name:'Icy Strait Point (Hoonah), Alaska', lng:-135.4430, lat:58.1364},
+      {name:'Istanbul, Türkiye', lng:28.9784, lat:41.0082},
+      {name:'Izmir, Türkiye', lng:27.1428, lat:38.4237},
+      {name:'Juneau, Alaska', lng:-134.4197, lat:58.3019},
+      {name:'Kahului (Maui), Hawaii', lng:-156.4729, lat:20.8893},
+      {name:'Kailua-Kona (Hawaiʻi), Hawaii', lng:-155.9970, lat:19.6400},
+      {name:'Katakolon (Olympia), Greece', lng:21.3167, lat:37.6500},
+      {name:'Ketchikan, Alaska', lng:-131.6461, lat:55.3422},
+      {name:'Key West, Florida', lng:-81.7800, lat:24.5551},
+      {name:'Kochi, Japan', lng:133.5311, lat:33.5597},
+      {name:'La Baie (Saguenay), Québec', lng:-70.8826, lat:48.3327},
+      {name:'La Digue, Seychelles', lng:55.8410, lat:-4.3570},
+      {name:'Las Palmas (Gran Canaria)', lng:-15.4363, lat:28.1235},
+      {name:'Lerwick (Shetland), Scotland', lng:-1.1456, lat:60.1539},
+      {name:'Limassol, Cyprus', lng:33.0226, lat:34.7071},
+      {name:'Lisbon, Portugal', lng:-9.1393, lat:38.7223},
+      {name:'Livorno (for Florence/Pisa), Italy', lng:10.3106, lat:43.5485},
+      {name:'Los Angeles, California', lng:-118.2437, lat:34.0522},
+      {name:'Lüderitz, Namibia', lng:15.1594, lat:-26.6481},
+      {name:'Málaga, Spain', lng:-4.4214, lat:36.7213},
+      {name:'Marseille (Provence), France', lng:5.3698, lat:43.2965},
+      {name:'Melbourne, Australia', lng:144.9631, lat:-37.8136},
+      {name:'Messina (Sicily), Italy', lng:15.5540, lat:38.1938},
+      {name:'Miami, Florida', lng:-80.1918, lat:25.7617},
+      {name:'Mossel Bay, South Africa', lng:22.1460, lat:-34.1830},
+      {name:'Mykonos, Greece', lng:25.3289, lat:37.4467},
+      {name:'Nassau, Bahamas', lng:-77.3504, lat:25.0443},
+      {name:'Naples, Italy', lng:14.2681, lat:40.8518},
+      {name:'New Orleans, Louisiana', lng:-90.0715, lat:29.9511},
+      {name:'New York, New York', lng:-74.0060, lat:40.7128},
+      {name:'Newport, Rhode Island', lng:-71.3128, lat:41.4901},
+      {name:'Nha Trang, Vietnam', lng:109.1967, lat:12.2388},
+      {name:'Ocho Rios, Jamaica', lng:-77.1031, lat:18.4076},
+      {name:'Oranjestad, Aruba', lng:-70.0347, lat:12.5211},
+      {name:'Palma de Mallorca, Spain', lng:2.6502, lat:39.5696},
+      {name:'Ponta Delgada (Azores), Portugal', lng:-25.6756, lat:37.7412},
+      {name:'Port Canaveral (Orlando), Florida', lng:-80.6188, lat:28.4101},
+      {name:'Port Elizabeth (Gqeberha), South Africa', lng:25.6022, lat:-33.9608},
+      {name:'Portland, Maine', lng:-70.2568, lat:43.6591},
+      {name:'Praslin, Seychelles', lng:55.7286, lat:-4.3176},
+      {name:'Puerto Plata, Dominican Republic', lng:-70.6871, lat:19.7808},
+      {name:'Puerto Quetzal, Guatemala', lng:-90.7883, lat:13.9213},
+      {name:'Puntarenas, Costa Rica', lng:-84.8384, lat:9.9763},
+      {name:'Québec City, Québec', lng:-71.2080, lat:46.8139},
+      {name:'Reykjavík, Iceland', lng:-21.9426, lat:64.1466},
+      {name:'Richards Bay, South Africa', lng:32.0377, lat:-28.7830},
+      {name:'Road Town, Tortola (BVI)', lng:-64.6185, lat:18.4286},
+      {name:'Roatán (Coxen Hole), Honduras', lng:-86.5370, lat:16.3170},
+      {name:'Rome/Civitavecchia, Italy', lng:11.7920, lat:42.0930},
+      {name:'Roseau, Dominica', lng:-61.3870, lat:15.3010},
+      {name:'Royal Naval Dockyard, Bermuda', lng:-64.8356, lat:32.3230},
+      {name:'Saint John, New Brunswick', lng:-66.0633, lat:45.2733},
+      {name:'Saint Petersburg, Russia', lng:30.3609, lat:59.9311},
+      {name:'San Francisco, California', lng:-122.4194, lat:37.7749},
+      {name:'San Juan, Puerto Rico', lng:-66.1057, lat:18.4655},
+      {name:'Santa Cruz de Tenerife, Canary Islands', lng:-16.2518, lat:28.4636},
+      {name:'Santorini (Fira), Greece', lng:25.4333, lat:36.4167},
+      {name:'Seattle, Washington', lng:-122.3321, lat:47.6062},
+      {name:'Skagway, Alaska', lng:-135.3139, lat:59.4583},
+      {name:'Split, Croatia', lng:16.4402, lat:43.5081},
+      {name:'Stockholm, Sweden', lng:18.0686, lat:59.3293},
+      {name:'Sydney, Australia', lng:151.2093, lat:-33.8688},
+      {name:'Sydney, Nova Scotia', lng:-60.1942, lat:46.1368},
+      {name:'Tallinn, Estonia', lng:24.7536, lat:59.4370},
+      {name:'Tampa, Florida', lng:-82.4572, lat:27.9506},
+      {name:'Tórshavn, Faroe Islands', lng:-6.7900, lat:62.0079},
+      {name:'Tokyo, Japan', lng:139.6503, lat:35.6762},
+      {name:'Toulon, France', lng:5.9280, lat:43.1242},
+      {name:'Valletta, Malta', lng:14.5146, lat:35.8989},
+      {name:'Vancouver, British Columbia', lng:-123.1207, lat:49.2827},
+      {name:'Venice, Italy', lng:12.3155, lat:45.4408},
+      {name:'Victoria (Mahé), Seychelles', lng:55.4550, lat:-4.6200},
+      {name:'Victoria, British Columbia', lng:-123.3656, lat:48.4284},
+      {name:'Warnemünde (Rostock), Germany', lng:12.0860, lat:54.1760},
+      {name:'Whittier, Alaska', lng:-148.6837, lat:60.7752},
+      {name:'Willemstad, Curaçao', lng:-68.9336, lat:12.1091},
+      {name:'Zeebrugge (Bruges), Belgium', lng:3.2070, lat:51.3310}
+    ];
+
+    // constants
+    const EARTH_R_KM = 6371;
+    const LIMIT_MI = 15;
+    const LIMIT_KM = LIMIT_MI * 1.609344; // 24.14016 km
+    const SEARCH_RADIUS_M = 2500; // Street View search radius around candidate point
 
     /* ======= Utilities ======= */
     function rand(min, max){ return Math.random()*(max-min)+min; }
 
-    // Random lat/lng with light bias to populated latitudes, avoids extreme poles & oceans a bit
-    function randomLatLng() {
-      // Latitude: pick from a distribution favoring mid-latitudes
-      const bands = [
-        {min:-60, max:-30, w:1}, {min:-30, max:0, w:2.5},
-        {min:0, max:30, w:3}, {min:30, max:55, w:2.5}, {min:55, max:70, w:1}
-      ];
-      const sumW = bands.reduce((s,b)=>s+b.w,0);
-      let r = Math.random()*sumW, pick=bands[0];
-      for (const b of bands){ if ((r-=b.w) <= 0){ pick=b; break; } }
-      const lat = rand(pick.min, pick.max);
-      const lng = rand(-180, 180);
-      return new google.maps.LatLng(lat, lng);
-    }
+    function toRad(d){ return d*Math.PI/180; }
+    function toDeg(r){ return r*180/Math.PI; }
 
+    // Haversine distance in km
     function haversineKm(a, b){
-      const R = 6371; // km
-      const toRad = (d)=>d*Math.PI/180;
       const dLat = toRad(b.lat()-a.lat());
       const dLng = toRad(b.lng()-a.lng());
       const s1 = Math.sin(dLat/2), s2 = Math.sin(dLng/2);
       const A = s1*s1 + Math.cos(toRad(a.lat()))*Math.cos(toRad(b.lat()))*s2*s2;
       const c = 2*Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
-      return R*c;
+      return EARTH_R_KM*c;
+    }
+
+    // Offset a lat/lng by distance (km) and bearing (deg)
+    function offsetLatLng(lat, lng, distKm, bearingDeg){
+      const δ = distKm / EARTH_R_KM;
+      const θ = toRad(bearingDeg);
+      const φ1 = toRad(lat);
+      const λ1 = toRad(lng);
+
+      const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
+      const sinδ = Math.sin(δ), cosδ = Math.cos(δ);
+
+      const sinφ2 = sinφ1 * cosδ + cosφ1 * sinδ * Math.cos(θ);
+      const φ2 = Math.asin(sinφ2);
+      const y = Math.sin(θ) * sinδ * cosφ1;
+      const x = cosδ - sinφ1 * sinφ2;
+      const λ2 = λ1 + Math.atan2(y, x);
+
+      // Normalize longitude to [-180, 180]
+      let lng2 = toDeg(λ2);
+      lng2 = ((lng2 + 540) % 360) - 180;
+
+      return new google.maps.LatLng(toDeg(φ2), lng2);
+    }
+
+    // Random point within circle radius (uniform by area)
+    function randomPointWithin(lat, lng, radiusKm){
+      const r = radiusKm * Math.sqrt(Math.random()); // sqrt for uniform disk
+      const bearing = rand(0, 360);
+      return offsetLatLng(lat, lng, r, bearing);
     }
 
     // Score similar feel to GeoGuessr: decays with distance
@@ -184,23 +353,40 @@
 
     function setStatus(txt){ document.getElementById('status').textContent = txt; }
 
-    /* ======= Core Flow ======= */
-    async function loadRandomPano(maxTries=25){
+    /* ======= Core Flow (restricted to within 15 miles of ports) ======= */
+    async function loadRandomPano(maxTries=60){
       loadingNew = true;
-      setStatus('Finding a Street View spot…');
+      setStatus('Finding a Street View spot near a cruise port…');
       return new Promise((resolve, reject)=>{
         let tries = 0;
         (function attempt(){
-          if (tries++ >= maxTries){ reject(new Error('No panorama found.')); return; }
-          const loc = randomLatLng();
+          if (tries++ >= maxTries){ reject(new Error('No panorama found near ports.')); return; }
+
+          // 1) Pick a random port
+          const base = PORTS[Math.floor(Math.random()*PORTS.length)];
+          // 2) Pick a random point within LIMIT_KM of that port
+          const candidate = randomPointWithin(base.lat, base.lng, LIMIT_KM * 0.98); // small buffer inside limit
+
           svService.getPanorama(
-            { location: loc, radius: 50000, preference: google.maps.StreetViewPreference.BEST, source: google.maps.StreetViewSource.OUTDOOR },
+            { location: candidate, radius: SEARCH_RADIUS_M, preference: google.maps.StreetViewPreference.BEST, source: google.maps.StreetViewSource.OUTDOOR },
             (data, status)=>{
               if (status === google.maps.StreetViewStatus.OK && data && data.location && data.location.latLng){
-                resolve(data);
+                const panoLatLng = data.location.latLng;
+                // 3) Enforce final constraint: pano must be <= LIMIT_KM of *some* port
+                let within = false;
+                for (const p of PORTS){
+                  const d = haversineKm(new google.maps.LatLng(p.lat,p.lng), panoLatLng);
+                  if (d <= LIMIT_KM){ within = true; break; }
+                }
+                if (within){
+                  resolve(data);
+                } else {
+                  setStatus(`Searching near ports… (try ${tries}/${maxTries})`);
+                  setTimeout(attempt, 40);
+                }
               } else {
-                setStatus(`Searching… (try ${tries}/${maxTries})`);
-                setTimeout(attempt, 60);
+                setStatus(`Searching near ports… (try ${tries}/${maxTries})`);
+                setTimeout(attempt, 40);
               }
             }
           );
@@ -228,9 +414,9 @@
       if (linkLine){ linkLine.setMap(null); linkLine = null; }
       currentGuessLatLng = null;
       document.getElementById('btnGuess').disabled = true;
-      setStatus('Loading a random location…');
+      setStatus('Loading a random location near a port…');
       loadRandomPano().then(showPanorama).catch(()=>{
-        setStatus('Could not find a Street View right now. Try again.');
+        setStatus('Could not find a Street View near ports right now. Try again.');
       });
     }
 
@@ -321,6 +507,28 @@
       prepareNextRound();
     }
 
+    /* ======= Toggle mini map ======= */
+    function setMiniMapVisible(visible){
+      const wrap = document.getElementById('globeWrap');
+      const btn = document.getElementById('toggleMapBtn');
+      miniMapVisible = visible;
+      if (visible){
+        wrap.style.display = 'block';
+        document.body.classList.remove('mapHidden');
+        btn.textContent = 'Hide Map';
+        btn.title = 'Hide mini map';
+        btn.setAttribute('aria-pressed','false');
+        // Force a resize to ensure Google Map renders correctly after being shown
+        setTimeout(()=> google.maps.event.trigger(guessMap, 'resize'), 50);
+      } else {
+        wrap.style.display = 'none';
+        document.body.classList.add('mapHidden');
+        btn.textContent = 'Show Map';
+        btn.title = 'Show mini map';
+        btn.setAttribute('aria-pressed','true');
+      }
+    }
+
     /* ======= Maps/Street View Setup ======= */
     function initMapsAndUI(){
       svService = new google.maps.StreetViewService();
@@ -370,11 +578,16 @@
       // Buttons
       document.getElementById('btnGuess').addEventListener('click', handleGuess);
       document.getElementById('btnSkip').addEventListener('click', ()=>{
-        setStatus('Skipping… finding a new place.');
+        setStatus('Skipping… finding a new place near a port.');
         prepareNextRound();
       });
       document.getElementById('btnNext').addEventListener('click', endOrNext);
       document.getElementById('btnNew').addEventListener('click', newGame);
+
+      // Toggle button
+      document.getElementById('toggleMapBtn').addEventListener('click', ()=>{
+        setMiniMapVisible(!miniMapVisible);
+      });
 
       // First load
       prepareNextRound();
@@ -382,6 +595,7 @@
 
     /* ======= Global init callback for Google Maps loader ======= */
     window.initGame = function(){
+      document.getElementById('roundMax').textContent = String(roundMax);
       initMapsAndUI();
     };
   </script>
