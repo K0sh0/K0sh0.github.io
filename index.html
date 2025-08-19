@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Street View Globe Guessing Game — Ports Mode (15 miles, Map Toggle + Leaderboard)</title>
+  <title>Street View Globe Guessing Game — Ports Mode (15 miles, Map Toggle + Leaderboard + Initials Modal)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
@@ -109,11 +109,59 @@
     .row{display:flex;justify-content:space-between;padding:2px 0}
     .me{color:#bfe7ff}
     .small{font-size:12px;color:#9fb1c9;margin-top:6px}
+
+    /* ===== Initials Modal ===== */
+    #initialsModal{
+      position:fixed;inset:0;z-index:20;display:none;
+      align-items:center;justify-content:center;
+      background:rgba(3,6,18,.6);backdrop-filter: blur(4px);
+    }
+    #initialsCard{
+      width:min(92vw,520px);
+      background:var(--panel);
+      border:1px solid rgba(125,211,252,.25);
+      border-radius:18px;overflow:hidden;
+      box-shadow:0 30px 80px rgba(0,0,0,.6)
+    }
+    #initialsHead{
+      padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex;justify-content:space-between;align-items:center
+    }
+    #initialsHead h4{margin:0;font-size:16px}
+    #initialsClose{
+      background:transparent;color:#cfe9ff;border:1px solid rgba(255,255,255,.12);
+      border-radius:10px;padding:6px 10px;cursor:pointer
+    }
+    #initialsBody{padding:14px 16px}
+    .slots{display:flex;gap:10px;justify-content:center;margin-bottom:12px}
+    .slot{
+      width:56px;height:64px;border-radius:12px;border:1px solid rgba(255,255,255,.16);
+      display:flex;align-items:center;justify-content:center;
+      font-weight:900;font-size:28px;background:#0f1330;color:#cfe9ff;
+      box-shadow: inset 0 -4px 0 rgba(255,255,255,.04);
+    }
+    #keypad{
+      display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin-top:8px
+    }
+    .key{
+      padding:10px 0;border-radius:10px;text-align:center;cursor:pointer;
+      background:#1a2045;border:1px solid rgba(255,255,255,.1);user-select:none
+    }
+    .key:hover{transform:translateY(-1px)}
+    .key.wide{grid-column:span 2}
+    .actions{display:flex;justify-content:space-between;gap:10px;margin-top:12px}
+    .btn{
+      padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.12);
+      background:var(--accent);color:#0b1020;font-weight:800;cursor:pointer;flex:1
+    }
+    .btn.secondary{background:#22274f;color:#e5e7eb}
+    .msg{margin-top:8px;font-size:12px;color:#9fb1c9;text-align:center}
     @media (max-width:720px){
       #globeWrap{width:75vw;height:38vh}
       .controls{left:auto;right:16px;transform:none}
       #toggleMapBtn{right:16px;bottom:16px}
       #leaderboard{left:16px;right:auto;bottom:16px}
+      .slot{width:48px;height:56px;font-size:24px}
     }
   </style>
 </head>
@@ -138,7 +186,30 @@
     <div id="leaderboard">
       <h3>🏆 Leaderboard (Top 10)</h3>
       <div id="boardList">Loading…</div>
-      <div class="small">Scores reset by age as your DB grows.</div>
+      <div class="small">Enter your initials after the game (A–Z/0–9).</div>
+    </div>
+
+    <!-- Initials Modal -->
+    <div id="initialsModal" role="dialog" aria-modal="true" aria-labelledby="initialsTitle">
+      <div id="initialsCard">
+        <div id="initialsHead">
+          <h4 id="initialsTitle">Submit Score</h4>
+          <button id="initialsClose">Cancel</button>
+        </div>
+        <div id="initialsBody">
+          <div class="slots">
+            <div class="slot" id="slot0">•</div>
+            <div class="slot" id="slot1">•</div>
+            <div class="slot" id="slot2">•</div>
+          </div>
+          <div id="keypad"></div>
+          <div class="actions">
+            <button class="btn secondary" id="btnClear">Clear</button>
+            <button class="btn" id="btnSubmit" disabled>Submit</button>
+          </div>
+          <div class="msg" id="initialsMsg"></div>
+        </div>
+      </div>
     </div>
 
     <div class="footerHelp">Tip: You can move around in Street View before guessing.</div>
@@ -186,8 +257,9 @@
 
     /* ======= Supabase (fill these with your project details) ======= */
     const SUPABASE_URL = "https://ckajnizstineqlvwmelc.supabase.co"; // <-- replace
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrYWpuaXpzdGluZXFsdndtZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0NzY3OTUsImV4cCI6MjA3MTA1Mjc5NX0.UbexwbgzhICpCw5tUlwKH-sRvx6aFBWXOBFYbycbUKw"; // <-- replace (anon public)
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrYWpuaXpzdGluZXFsdndtZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0NzY3OTUsImV4cCI6MjA3MTA1Mjc5NX0.UbexwbgzhICpCw5tUlwKH-sRvx6aFBWXOBFYbycbUKw";                // <-- replace (anon public)
     const TOP_LIMIT = 10;
+    const NAME_LEN = 3;
 
     async function sbFetch(path, init={}){
       const headers = {
@@ -204,13 +276,15 @@
       return res.json();
     }
     async function saveScore(name, points){
-      // sanitize on client too
-      name = (name||"").trim().slice(0,24);
-      const safePoints = Math.max(0, Math.min(5000, Math.round(points||0)));
+      name = sanitizeName(name);
+      if (name.length !== NAME_LEN) throw new Error("Name must be exactly 3 characters.");
+      const safePoints = Math.max(0, Math.round(points||0));
       return sbFetch("scores", { method:"POST", body: JSON.stringify([{ name, points: safePoints }]) });
     }
+    function sanitizeName(s){
+      return (s||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0, NAME_LEN);
+    }
     async function getTopScores(limit=TOP_LIMIT){
-      // order=points.desc,created_at.desc
       const params = new URLSearchParams({
         select:"*",
         order:"points.desc,created_at.desc",
@@ -231,7 +305,6 @@
       }).join("");
     }
     function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
-
     async function refreshLeaderboard(highlightName=null){
       try{
         const list = await getTopScores(TOP_LIMIT);
@@ -240,6 +313,120 @@
         console.error("Leaderboard load failed", e);
         document.getElementById("boardList").textContent = "Leaderboard unavailable.";
       }
+    }
+
+    /* ======= Initials Modal Logic ======= */
+    let modalOpen = false;
+    let initials = ["","",""];
+    let focusIndex = 0;
+    let onSubmitCallback = null;
+    let onCancelCallback = null;
+
+    function updateSlots(){
+      for(let i=0;i<3;i++){
+        const el = document.getElementById("slot"+i);
+        el.textContent = initials[i] || "•";
+      }
+      document.getElementById("btnSubmit").disabled = initials.join("").length !== 3;
+    }
+
+    function openInitialsModal(defaultValue=""){
+      initials = sanitizeName(defaultValue || localStorage.getItem("playerName3") || "").split("");
+      while(initials.length<3) initials.push("");
+      focusIndex = initials.findIndex(ch => ch==="");
+      if (focusIndex === -1) focusIndex = 2;
+      updateSlots();
+      document.getElementById("initialsMsg").textContent = "";
+      document.getElementById("initialsModal").style.display = "flex";
+      modalOpen = true;
+    }
+    function closeInitialsModal(){
+      document.getElementById("initialsModal").style.display = "none";
+      modalOpen = false;
+    }
+
+    function appendChar(ch){
+      ch = sanitizeName(ch);
+      if(!ch) return;
+      for(let i=0;i<3;i++){
+        if(!initials[i]){ initials[i]=ch; break; }
+      }
+      updateSlots();
+    }
+    function backspace(){
+      for(let i=2;i>=0;i--){
+        if(initials[i]){ initials[i]=""; break; }
+      }
+      updateSlots();
+    }
+    function clearInitials(){
+      initials = ["","",""];
+      updateSlots();
+    }
+
+    function buildKeypad(){
+      const keys = [];
+      // A-Z then 0-9
+      for(let i=65;i<=90;i++) keys.push(String.fromCharCode(i));
+      for(let i=48;i<=57;i++) keys.push(String.fromCharCode(i));
+      const pad = document.getElementById("keypad");
+      pad.innerHTML = "";
+      keys.forEach(k=>{
+        const b = document.createElement("div");
+        b.className = "key";
+        b.textContent = k;
+        b.addEventListener("click", ()=>appendChar(k));
+        pad.appendChild(b);
+      });
+      // special keys
+      const bk = document.createElement("div");
+      bk.className="key wide";
+      bk.textContent="⌫ Back";
+      bk.addEventListener("click", backspace);
+      pad.appendChild(bk);
+
+      const sp = document.createElement("div");
+      sp.className="key wide";
+      sp.textContent="⟲ Clear";
+      sp.addEventListener("click", clearInitials);
+      pad.appendChild(sp);
+    }
+
+    function submitInitials(){
+      const name = initials.join("");
+      if(name.length!==3){
+        document.getElementById("initialsMsg").textContent = "Please enter exactly 3 characters.";
+        return;
+      }
+      localStorage.setItem("playerName3", name);
+      closeInitialsModal();
+      if (typeof onSubmitCallback === "function") onSubmitCallback(name);
+    }
+
+    function initInitialsUI(){
+      buildKeypad();
+      document.getElementById("btnClear").addEventListener("click", clearInitials);
+      document.getElementById("btnSubmit").addEventListener("click", submitInitials);
+      document.getElementById("initialsClose").addEventListener("click", ()=>{
+        closeInitialsModal();
+        if (typeof onCancelCallback === "function") onCancelCallback();
+      });
+      // Basic keyboard support
+      window.addEventListener("keydown", (e)=>{
+        if(!modalOpen) return;
+        if(e.key==="Escape"){ closeInitialsModal(); if(onCancelCallback) onCancelCallback(); }
+        else if(e.key==="Backspace"){ backspace(); e.preventDefault(); }
+        else if(/^[a-zA-Z0-9]$/.test(e.key)){ appendChar(e.key); }
+        else if(e.key==="Enter"){ if(initials.join("").length===3) submitInitials(); }
+      });
+    }
+
+    function askForInitials(){
+      return new Promise((resolve,reject)=>{
+        onSubmitCallback = (name)=> resolve(name);
+        onCancelCallback = ()=> reject(new Error("cancelled"));
+        openInitialsModal();
+      });
     }
 
     /* ======= Ports (provided list) ======= */
@@ -374,10 +561,8 @@
 
     /* ======= Utilities ======= */
     function rand(min, max){ return Math.random()*(max-min)+min; }
-
     function toRad(d){ return d*Math.PI/180; }
     function toDeg(r){ return r*180/Math.PI; }
-
     // Haversine distance in km
     function haversineKm(a, b){
       const dLat = toRad(b.lat()-a.lat());
@@ -387,43 +572,34 @@
       const c = 2*Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
       return EARTH_R_KM*c;
     }
-
     // Offset a lat/lng by distance (km) and bearing (deg)
     function offsetLatLng(lat, lng, distKm, bearingDeg){
       const δ = distKm / EARTH_R_KM;
       const θ = toRad(bearingDeg);
       const φ1 = toRad(lat);
       const λ1 = toRad(lng);
-
       const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
       const sinδ = Math.sin(δ), cosδ = Math.cos(δ);
-
       const sinφ2 = sinφ1 * cosδ + cosφ1 * sinδ * Math.cos(θ);
       const φ2 = Math.asin(sinφ2);
       const y = Math.sin(θ) * sinδ * cosφ1;
       const x = cosδ - sinφ1 * sinφ2;
       const λ2 = λ1 + Math.atan2(y, x);
-
-      // Normalize longitude to [-180, 180]
       let lng2 = toDeg(λ2);
       lng2 = ((lng2 + 540) % 360) - 180;
-
       return new google.maps.LatLng(toDeg(φ2), lng2);
     }
-
     // Random point within circle radius (uniform by area)
     function randomPointWithin(lat, lng, radiusKm){
-      const r = radiusKm * Math.sqrt(Math.random()); // sqrt for uniform disk
+      const r = radiusKm * Math.sqrt(Math.random());
       const bearing = rand(0, 360);
       return offsetLatLng(lat, lng, r, bearing);
     }
-
-    // Score similar feel to GeoGuessr: decays with distance
+    // Score function
     function scoreFromDistanceKm(d){
-      const s = 5000*Math.exp(-d/2000); // 2,000 km characteristic decay
+      const s = 5000*Math.exp(-d/2000);
       return Math.max(0, Math.round(s));
     }
-
     function setStatus(txt){ document.getElementById('status').textContent = txt; }
 
     /* ======= Core Flow (restricted to within 15 miles of ports) ======= */
@@ -434,29 +610,20 @@
         let tries = 0;
         (function attempt(){
           if (tries++ >= maxTries){ reject(new Error('No panorama found near ports.')); return; }
-
-          // 1) Pick a random port
           const base = PORTS[Math.floor(Math.random()*PORTS.length)];
-          // 2) Pick a random point within LIMIT_KM of that port
-          const candidate = randomPointWithin(base.lat, base.lng, LIMIT_KM * 0.98); // small buffer inside limit
-
+          const candidate = randomPointWithin(base.lat, base.lng, LIMIT_KM * 0.98);
           svService.getPanorama(
             { location: candidate, radius: SEARCH_RADIUS_M, preference: google.maps.StreetViewPreference.BEST, source: google.maps.StreetViewSource.OUTDOOR },
             (data, status)=>{
               if (status === google.maps.StreetViewStatus.OK && data && data.location && data.location.latLng){
                 const panoLatLng = data.location.latLng;
-                // 3) Enforce final constraint: pano must be <= LIMIT_KM of *some* port
                 let within = false;
                 for (const p of PORTS){
                   const d = haversineKm(new google.maps.LatLng(p.lat,p.lng), panoLatLng);
                   if (d <= LIMIT_KM){ within = true; break; }
                 }
-                if (within){
-                  resolve(data);
-                } else {
-                  setStatus(`Searching near ports… (try ${tries}/${maxTries})`);
-                  setTimeout(attempt, 40);
-                }
+                if (within){ resolve(data); }
+                else { setStatus(`Searching near ports… (try ${tries}/${maxTries})`); setTimeout(attempt, 40); }
               } else {
                 setStatus(`Searching near ports… (try ${tries}/${maxTries})`);
                 setTimeout(attempt, 40);
@@ -473,7 +640,6 @@
       pano.setPano(panoData.location.pano);
       pano.setPov({heading: 0, pitch: 0});
       pano.setVisible(true);
-      // Enable movement/navigation by default
       pano.setOptions({ linksControl: true, panControl: true, zoomControl: true, motionTracking: false });
       setStatus('Explore, then click the globe to place your guess.');
       document.getElementById('btnGuess').disabled = !currentGuessLatLng;
@@ -481,7 +647,6 @@
     }
 
     function prepareNextRound(){
-      // Clear guess marker & state
       if (guessMarker){ guessMarker.setMap(null); guessMarker = null; }
       if (actualMarker){ actualMarker.setMap(null); actualMarker = null; }
       if (linkLine){ linkLine.setMap(null); linkLine = null; }
@@ -494,7 +659,6 @@
     }
 
     function revealResult(){
-      // Build results map with guess + actual + line
       if (!resultMap){
         resultMap = new google.maps.Map(document.getElementById('resultMap'), {
           zoom: 3,
@@ -504,7 +668,6 @@
           disableDefaultUI: false
         });
       }
-      // Clear existing overlays
       if (actualMarker){ actualMarker.setMap(null); }
       if (guessMarker && guessMarker.getMap() === resultMap){ guessMarker.setMap(null); }
 
@@ -522,7 +685,6 @@
         icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, strokeWeight: 3, strokeColor: '#60a5fa', fillColor: '#3b82f6', fillOpacity: .9 }
       });
 
-      // Line between points
       if (linkLine){ linkLine.setMap(null); }
       linkLine = new google.maps.Polyline({
         map: resultMap,
@@ -533,12 +695,9 @@
         strokeColor: '#7dd3fc'
       });
 
-      // Fit bounds
       const bounds = new google.maps.LatLngBounds();
       bounds.extend(currentGuessLatLng); bounds.extend(currentActualLatLng);
       resultMap.fitBounds(bounds, 80);
-
-      // Show overlay
       document.getElementById('result').style.display = 'block';
     }
 
@@ -548,13 +707,10 @@
       const pts = scoreFromDistanceKm(km);
       totalScore += pts;
 
-      // UI text
       document.getElementById('distanceText').textContent = `${km.toFixed(1)} km away`;
       document.getElementById('scoreThisRound').textContent = pts.toString();
       document.getElementById('roundSummary').textContent = `Round ${roundNow} of ${roundMax} · Total ${totalScore} pts`;
       document.getElementById('totalScore').textContent = totalScore.toString();
-
-      // Show both points on the result overlay map
       revealResult();
     }
 
@@ -565,18 +721,16 @@
         document.getElementById('btnNew').style.display = 'inline-block';
         document.getElementById('btnGuess').disabled = true;
 
-        // === Leaderboard save flow ===
+        // === Leaderboard save flow via modal ===
         setTimeout(async () => {
           try{
-            // Fetch current top to show progress; then prompt
             await refreshLeaderboard();
-            const suggested = localStorage.getItem("playerName") || "";
-            const name = prompt("Enter a name for the leaderboard (max 24 chars):", suggested) || "";
-            const trimmed = name.trim().slice(0,24);
-            if(trimmed){
-              localStorage.setItem("playerName", trimmed);
-              try{ await saveScore(trimmed, totalScore); } catch(e){ console.error("Save failed:", e); }
-              await refreshLeaderboard(trimmed);
+            try{
+              const name = await askForInitials();
+              try{ await saveScore(name, totalScore); } catch(e){ console.error("Save failed:", e); }
+              await refreshLeaderboard(name);
+            }catch(err){
+              // cancelled; do nothing
             }
           }catch(e){ console.error(e); }
         }, 50);
@@ -608,7 +762,6 @@
         btn.textContent = 'Hide Map';
         btn.title = 'Hide mini map';
         btn.setAttribute('aria-pressed','false');
-        // Force a resize to ensure Google Map renders correctly after being shown
         setTimeout(()=> google.maps.event.trigger(guessMap, 'resize'), 50);
       } else {
         wrap.style.display = 'none';
@@ -622,7 +775,6 @@
     /* ======= Maps/Street View Setup ======= */
     function initMapsAndUI(){
       svService = new google.maps.StreetViewService();
-
       pano = new google.maps.StreetViewPanorama(document.getElementById('pano'), {
         addressControl: false,
         motionTracking: false,
@@ -631,8 +783,6 @@
         zoomControl: true,
         fullscreenControl: false,
       });
-
-      // Mini "globe" map (vector maps show a 3D globe when zoomed out)
       guessMap = new google.maps.Map(document.getElementById('globe'), {
         center: {lat: 15, lng: 0},
         zoom: 2,
@@ -645,18 +795,12 @@
         isFractionalZoomEnabled: true,
         backgroundColor: '#0b0f1f'
       });
-
-      // Clicking the mini-map places/updates the guess
       guessMap.addListener('click', (e)=>{
         currentGuessLatLng = e.latLng;
         document.getElementById('btnGuess').disabled = loadingNew || !currentGuessLatLng;
-        // Place or move marker on the mini map
         if (!guessMarker){
           guessMarker = new google.maps.Marker({
-            position: e.latLng,
-            map: guessMap,
-            draggable: true,
-            title: 'Your guess'
+            position: e.latLng, map: guessMap, draggable: true, title: 'Your guess'
           });
           guessMarker.addListener('dragend', (ev)=>{ currentGuessLatLng = ev.latLng; });
         } else {
@@ -664,8 +808,6 @@
           guessMarker.setPosition(e.latLng);
         }
       });
-
-      // Buttons
       document.getElementById('btnGuess').addEventListener('click', handleGuess);
       document.getElementById('btnSkip').addEventListener('click', ()=>{
         setStatus('Skipping… finding a new place near a port.');
@@ -673,18 +815,15 @@
       });
       document.getElementById('btnNext').addEventListener('click', endOrNext);
       document.getElementById('btnNew').addEventListener('click', newGame);
-
-      // Toggle button
       document.getElementById('toggleMapBtn').addEventListener('click', ()=>{
         setMiniMapVisible(!miniMapVisible);
       });
 
-      // First load
+      initInitialsUI();
       prepareNextRound();
       refreshLeaderboard();
     }
 
-    /* ======= Global init callback for Google Maps loader ======= */
     window.initGame = function(){
       document.getElementById('roundMax').textContent = String(roundMax);
       initMapsAndUI();
