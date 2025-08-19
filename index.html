@@ -163,6 +163,10 @@
       #leaderboard{left:16px;right:auto;bottom:16px}
       .slot{width:48px;height:56px;font-size:24px}
     }
+  
+    /* --- Prevent revealing the location by clicking Google/Maps attribution --- */
+    .gm-style-cc, .gm-style-cc * { pointer-events: none !important; }
+
   </style>
 </head>
 <body>
@@ -245,6 +249,20 @@
   </script>
 
   <script>
+    
+      /* --- Hardening: neutralize map/watermark anchor clicks inside the pano --- */
+      function neutralizeGoogleLinks(){
+        try{
+          const container = document.getElementById('pano');
+          if(!container) return;
+          const anchors = container.querySelectorAll('a[href*="google."] , a[href*="maps.google"] , a[href*="google.com"]');
+          anchors.forEach(a => {
+            a.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); return false; }, true);
+          });
+        }catch(e){}
+      }
+      setInterval(neutralizeGoogleLinks, 800);
+
     /* ======= Game State ======= */
     let pano, svService, guessMap, resultMap, guessMarker, actualMarker, linkLine;
     let currentActualLatLng = null;
