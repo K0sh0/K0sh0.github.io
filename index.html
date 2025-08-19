@@ -167,6 +167,10 @@
     /* --- Prevent revealing the location by clicking Google/Maps attribution --- */
     .gm-style-cc, .gm-style-cc * { pointer-events: none !important; }
 
+  
+    /* Keep Google/Maps attribution visible but completely inert */
+    #pano a[href*="google"], #pano a[href*="maps.google"], .gm-style-cc a { pointer-events: none !important; cursor: default !important; }
+
   </style>
 </head>
 <body>
@@ -262,6 +266,48 @@
         }catch(e){}
       }
       setInterval(neutralizeGoogleLinks, 800);
+
+      /* --- Strong protection: prevent hover from showing coordinates in status/tooltip --- */
+      function cloakGoogleAnchors(){
+        try{
+          // look inside pano and common control roots
+          const roots = [
+            document.getElementById('pano'),
+            ...document.querySelectorAll('.gm-style, .gm-style-cc, .gmnoprint')
+          ].filter(Boolean);
+          roots.forEach(root => {
+            root.querySelectorAll('a').forEach(a => {
+              const href = a.getAttribute('href') || '';
+              if (/google\./i.test(href) || /maps\.google/i.test(href)){
+                // remove href so browsers can't show it in the status bar
+                if (!a.hasAttribute('data-ghost-href')) {
+                  a.setAttribute('data-ghost-href', href);
+                }
+                if (a.hasAttribute('href')) a.removeAttribute('href');
+                // remove tooltips
+                if (a.hasAttribute('title')) a.removeAttribute('title');
+                a.setAttribute('aria-label','');
+                // make it inert to any pointer interaction
+                a.style.pointerEvents = 'none';
+                a.style.cursor = 'default';
+              }
+            });
+          });
+        }catch(e){ /* no-op */ }
+      }
+      // Observe pano for re-renders and apply cloak
+      function observeGoogleForCloak(){
+        try{
+          const target = document.getElementById('pano');
+          if(!target) return;
+          const obs = new MutationObserver(() => cloakGoogleAnchors());
+          obs.observe(target, { subtree: true, childList: true, attributes: true });
+        }catch(e){ /* no-op */ }
+      }
+      cloakGoogleAnchors();
+      observeGoogleForCloak();
+      setInterval(cloakGoogleAnchors, 1000);
+
 
     /* ======= Game State ======= */
     let pano, svService, guessMap, resultMap, guessMarker, actualMarker, linkLine;
