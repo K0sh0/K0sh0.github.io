@@ -88,7 +88,7 @@
       display:flex;justify-content:space-between;align-items:center;
       padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(17,23,50,.85),rgba(17,23,50,.65))
     }
-    .scoreLine{display:flex;gap:14px;align-items:baseline}
+    .scoreLine{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
     .scoreBig{font-size:28px;font-weight:900}
     .distance{font-size:14px;color:#cfe9ff;opacity:.9}
     .rounds{font-size:12px;color:var(--muted)}
@@ -96,19 +96,6 @@
     .footerHelp{
       position:absolute;right:16px;top:16px;z-index:5;font-size:12px;color:#b9c3d6;opacity:.9
     }
-    /* Leaderboard card */
-    #leaderboard{
-      position:absolute;left:16px;bottom:16px;z-index:9;
-      padding:12px 14px;border-radius:14px;background:rgba(6,10,28,.6);
-      border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);
-      min-width:260px;max-width:320px;
-      box-shadow:0 14px 40px rgba(0,0,0,.45)
-    }
-    #leaderboard h3{margin:0 0 8px 0;font-size:14px;letter-spacing:.3px}
-    #boardList{font-size:13px;line-height:1.5}
-    .row{display:flex;justify-content:space-between;padding:2px 0}
-    .me{color:#bfe7ff}
-    .small{font-size:12px;color:#9fb1c9;margin-top:6px}
 
     /* ===== Initials Modal ===== */
     #initialsModal{
@@ -117,7 +104,7 @@
       background:rgba(3,6,18,.6);backdrop-filter: blur(4px);
     }
     #initialsCard{
-      width:min(92vw,520px);
+      width:min(92vw,720px);
       background:var(--panel);
       border:1px solid rgba(125,211,252,.25);
       border-radius:18px;overflow:hidden;
@@ -156,21 +143,33 @@
     }
     .btn.secondary{background:#22274f;color:#e5e7eb}
     .msg{margin-top:8px;font-size:12px;color:#9fb1c9;text-align:center}
+
+    /* Leaderboard (now shown only inside the initials modal) */
+    #leaderboard{
+      margin-top:16px;
+      padding:12px 14px;border-radius:14px;background:rgba(6,10,28,.6);
+      border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);
+      min-width:260px;
+      box-shadow:0 14px 40px rgba(0,0,0,.45)
+    }
+    #leaderboard h3{margin:0 0 8px 0;font-size:14px;letter-spacing:.3px}
+    #boardList{font-size:13px;line-height:1.5}
+    .row{display:flex;justify-content:space-between;padding:2px 0}
+    .me{color:#bfe7ff}
+    .small{font-size:12px;color:#9fb1c9;margin-top:6px}
+
     @media (max-width:720px){
       #globeWrap{width:75vw;height:38vh}
       .controls{left:auto;right:16px;transform:none}
       #toggleMapBtn{right:16px;bottom:16px}
-      #leaderboard{left:16px;right:auto;bottom:16px}
       .slot{width:48px;height:56px;font-size:24px}
     }
   
     /* --- Prevent revealing the location by clicking Google/Maps attribution --- */
     .gm-style-cc, .gm-style-cc * { pointer-events: none !important; }
-
   
     /* Keep Google/Maps attribution visible but completely inert */
     #pano a[href*="google"], #pano a[href*="maps.google"], .gm-style-cc a { pointer-events: none !important; cursor: default !important; }
-
   </style>
 </head>
 <body>
@@ -189,13 +188,6 @@
     </div>
     <!-- Toggle button OVER the map -->
     <button id="toggleMapBtn" aria-pressed="false" aria-controls="globeWrap" title="Hide mini map">Hide Map</button>
-
-    <!-- Leaderboard -->
-    <div id="leaderboard">
-      <h3>🏆 Leaderboard (Top 10)</h3>
-      <div id="boardList">Loading…</div>
-      <div class="small">Enter your initials after the game (A–Z/0–9).</div>
-    </div>
 
     <!-- Initials Modal -->
     <div id="initialsModal" role="dialog" aria-modal="true" aria-labelledby="initialsTitle">
@@ -216,6 +208,13 @@
             <button class="btn" id="btnSubmit" disabled>Submit</button>
           </div>
           <div class="msg" id="initialsMsg"></div>
+
+          <!-- Leaderboard (shown only during initials entry at game end) -->
+          <div id="leaderboard">
+            <h3>🏆 Leaderboard (Top 10)</h3>
+            <div id="boardList">Loading…</div>
+            <div class="small">Enter your initials after the game (A–Z/0–9).</div>
+          </div>
         </div>
       </div>
     </div>
@@ -236,6 +235,7 @@
         <div id="resultInfo">
           <div class="scoreLine">
             <span class="pill" id="distanceText">—</span>
+            <span class="pill" id="locationName">—</span>
             <span class="scoreBig" id="scoreThisRound">0</span><span>pts</span>
             <span class="rounds" id="roundSummary"></span>
           </div>
@@ -312,6 +312,7 @@
     /* ======= Game State ======= */
     let pano, svService, guessMap, resultMap, guessMarker, actualMarker, linkLine;
     let currentActualLatLng = null;
+    let currentActualName = null; // NEW: store nearest port name for the revealed location
     let currentGuessLatLng = null;
     let totalScore = 0;
     let roundNow = 1;
@@ -375,7 +376,8 @@
         renderLeaderboard(list, highlightName);
       }catch(e){
         console.error("Leaderboard load failed", e);
-        document.getElementById("boardList").textContent = "Leaderboard unavailable.";
+        const board = document.getElementById("boardList");
+        if (board) board.textContent = "Leaderboard unavailable.";
       }
     }
 
@@ -403,6 +405,8 @@
       document.getElementById("initialsMsg").textContent = "";
       document.getElementById("initialsModal").style.display = "flex";
       modalOpen = true;
+      // Show/refresh leaderboard only while entering initials
+      refreshLeaderboard();
     }
     function closeInitialsModal(){
       document.getElementById("initialsModal").style.display = "none";
@@ -1037,7 +1041,7 @@
 
     // constants
     const EARTH_R_KM = 6371;
-    const LIMIT_MI = 35;
+    const LIMIT_MI = 15;
     const LIMIT_KM = LIMIT_MI * 1.609344; // 24.14016 km
     const SEARCH_RADIUS_M = 2500; // Street View search radius around candidate point
 
@@ -1084,6 +1088,20 @@
     }
     function setStatus(txt){ document.getElementById('status').textContent = txt; }
 
+    // Find nearest port (within LIMIT_KM); returns its name or null
+    function nearestPortName(latLng){
+      let best = null;
+      let bestD = Infinity;
+      for (const p of PORTS){
+        const d = haversineKm(new google.maps.LatLng(p.lat, p.lng), latLng);
+        if (d < bestD){
+          bestD = d;
+          best = p;
+        }
+      }
+      return bestD <= LIMIT_KM ? (best?.name || null) : null;
+    }
+
     /* ======= Core Flow (restricted to within 15 miles of ports) ======= */
     async function loadRandomPano(maxTries=60){
       loadingNew = true;
@@ -1119,6 +1137,7 @@
     function showPanorama(panoData){
       const latLng = panoData.location.latLng;
       currentActualLatLng = latLng;
+      currentActualName = nearestPortName(latLng) || "Unknown location"; // NEW: set displayed name
       pano.setPano(panoData.location.pano);
       pano.setPov({heading: 0, pitch: 0});
       pano.setVisible(true);
@@ -1180,6 +1199,11 @@
       const bounds = new google.maps.LatLngBounds();
       bounds.extend(currentGuessLatLng); bounds.extend(currentActualLatLng);
       resultMap.fitBounds(bounds, 80);
+
+      // NEW: show location name in the results line
+      const locEl = document.getElementById('locationName');
+      if (locEl) locEl.textContent = currentActualName || "Unknown location";
+
       document.getElementById('result').style.display = 'block';
     }
 
@@ -1203,7 +1227,7 @@
         document.getElementById('btnNew').style.display = 'inline-block';
         document.getElementById('btnGuess').disabled = true;
 
-        // === Leaderboard save flow via modal ===
+        // === Leaderboard save flow via modal (leaderboard visible only now) ===
         setTimeout(async () => {
           try{
             await refreshLeaderboard();
@@ -1303,6 +1327,7 @@
 
       initInitialsUI();
       prepareNextRound();
+      // We can still prefetch leaderboard data (it will only be visible in the modal)
       refreshLeaderboard();
     }
 
