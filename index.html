@@ -2,7 +2,7 @@ I'm<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Street View Globe Guessing Game — Ports Mode (15 miles, Map Toggle + Leaderboard + Initials Modal)</title>
+  <title>NCL Port Guesser</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
@@ -144,7 +144,7 @@ I'm<!DOCTYPE html>
     .btn.secondary{background:#22274f;color:#e5e7eb}
     .msg{margin-top:8px;font-size:12px;color:#9fb1c9;text-align:center}
 
-    /* Leaderboard (now shown only inside the initials modal) */
+    /* Leaderboard*/
     #leaderboard{
       margin-top:16px;
       padding:12px 14px;border-radius:14px;background:rgba(6,10,28,.6);
@@ -247,7 +247,7 @@ I'm<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Google Maps JS (Street View + Maps). Your API key is embedded per your request. -->
+  <!-- Google Maps JS (Street View + Maps). Your API key is embedded -->
   <script async
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAIujmdEMh04_ZfJB1kZ0839Fh_MI8pQAU&v=weekly&callback=initGame">
   </script>
@@ -320,7 +320,7 @@ I'm<!DOCTYPE html>
     let loadingNew = false;
     let miniMapVisible = true;
 
-    /* ======= Supabase (fill these with your project details) ======= */
+    /* ======= Supabase  */
     const SUPABASE_URL = "https://ckajnizstineqlvwmelc.supabase.co"; // <-- replace
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrYWpuaXpzdGluZXFsdndtZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0NzY3OTUsImV4cCI6MjA3MTA1Mjc5NX0.UbexwbgzhICpCw5tUlwKH-sRvx6aFBWXOBFYbycbUKw";                // <-- replace (anon public)
     const TOP_LIMIT = 10;
