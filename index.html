@@ -1,1 +1,1320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>NCL Port Guesser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0f1220;
+      --panel:#151935;
+      --accent:#7dd3fc;
+      --text:#e5e7eb;
+      --muted:#9aa3b2;
+      --good:#22c55e;
+      --warn:#f59e0b;
+      --bad:#ef4444;
+      --glass:rgba(21,25,53,.7);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:radial-gradient(1200px 600px at 70% 20%,#1a2045 0%,#0b0e1a 60%,#070913 100%);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    #app{position:relative;height:100%;width:100%}
+    #pano{position:absolute;inset:0;border:none}
+    /* HUD */
+    .hud{
+      position:absolute;left:16px;top:16px;z-index:5;
+      display:flex;gap:10px;align-items:center;
+      background:var(--glass);backdrop-filter: blur(8px);
+      border:1px solid rgba(125,211,252,.25);
+      border-radius:16px;padding:10px 14px;box-shadow:0 10px 30px rgba(0,0,0,.35)
+    }
+    .chip{display:flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;background:#0f1330;border:1px solid rgba(255,255,255,.08);color:var(--text);font-weight:600;font-size:14px}
+    .dot{width:8px;height:8px;border-radius:50%}
+    .dot.green{background:var(--good)} .dot.yellow{background:var(--warn)}
+    .chip .label{opacity:.8;font-weight:500}
+    /* Globe map (mini) */
+    #globeWrap{
+      position:absolute;right:16px;bottom:16px;z-index:6;
+      width:360px;height:260px;border-radius:18px;overflow:hidden;
+      box-shadow:0 14px 40px rgba(0,0,0,.5);border:1px solid rgba(125,211,252,.25);
+      background:var(--panel)
+    }
+    #globe{width:100%;height:100%}
+    #globeHeader{
+      position:absolute;left:10px;top:10px;z-index:7;
+      padding:6px 10px;border-radius:999px;background:rgba(0,0,0,.45);color:#cfe9ff;border:1px solid rgba(255,255,255,.08);font-size:12px
+    }
+    /* Toggle button — OVER the map (overlay) */
+    #toggleMapBtn{
+      position:absolute;right:24px;bottom:24px;z-index:8;
+      appearance:none;border:none;cursor:pointer;
+      padding:10px 12px;border-radius:999px;font-weight:800;
+      color:#0b1020;background:var(--accent);transition:.2s transform, .2s opacity;
+      border:1px solid rgba(125,211,252,.3);
+      box-shadow:0 10px 30px rgba(0,0,0,.45)
+    }
+    #toggleMapBtn:hover{transform:translateY(-2px)}
+    .mapHidden #toggleMapBtn{position:absolute;right:16px;bottom:16px;z-index:8;}
+    /* Controls */
+    .controls{
+      position:absolute;left:50%;transform:translateX(-50%);
+      bottom:16px;z-index:7;display:flex;gap:10px;align-items:center;
+      background:var(--glass);backdrop-filter: blur(10px);
+      border:1px solid rgba(125,211,252,.25);border-radius:16px;padding:10px 12px;
+      box-shadow:0 10px 30px rgba(0,0,0,.35)
+    }
+    button{
+      appearance:none;border:none;cursor:pointer;
+      padding:10px 14px;border-radius:10px;font-weight:700;
+      color:#0b1020;background:var(--accent);transition:.2s transform, .2s opacity
+    }
+    button:hover{transform:translateY(-1px)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .secondary{background:#22274f;color:#e5e7eb;border:1px solid rgba(255,255,255,.08)}
+    .hint{font-size:13px;color:var(--muted);padding:0 8px}
+    /* Result overlay */
+    #result{
+      position:absolute;inset:0;z-index:8;display:none;
+      background:rgba(3,6,18,.65);backdrop-filter:blur(6px)
+    }
+    #resultCard{
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:min(92vw,960px);height:min(80vh,580px);background:var(--panel);
+      border:1px solid rgba(125,211,252,.25);border-radius:18px;overflow:hidden;
+      box-shadow:0 30px 80px rgba(0,0,0,.6)
+    }
+    #resultMap{width:100%;height:70%}
+    #resultInfo{
+      display:flex;justify-content:space-between;align-items:center;
+      padding:12px 16px;border-top:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(17,23,50,.85),rgba(17,23,50,.65))
+    }
+    .scoreLine{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+    .scoreBig{font-size:28px;font-weight:900}
+    .distance{font-size:14px;color:#cfe9ff;opacity:.9}
+    .rounds{font-size:12px;color:var(--muted)}
+    .pill{padding:6px 10px;border-radius:999px;background:#0f1330;border:1px solid rgba(255,255,255,.08);color:#bfe7ff;font-weight:600}
+    .footerHelp{
+      position:absolute;right:16px;top:16px;z-index:5;font-size:12px;color:#b9c3d6;opacity:.9
+    }
+
+    /* ===== Initials Modal ===== */
+    #initialsModal{
+      position:fixed;inset:0;z-index:20;display:none;
+      align-items:center;justify-content:center;
+      background:rgba(3,6,18,.6);backdrop-filter: blur(4px);
+    }
+    #initialsCard{
+      width:min(92vw,720px);
+      background:var(--panel);
+      border:1px solid rgba(125,211,252,.25);
+      border-radius:18px;overflow:hidden;
+      box-shadow:0 30px 80px rgba(0,0,0,.6)
+    }
+    #initialsHead{
+      padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08);
+      display:flex;justify-content:space-between;align-items:center
+    }
+    #initialsHead h4{margin:0;font-size:16px}
+    #initialsClose{
+      background:transparent;color:#cfe9ff;border:1px solid rgba(255,255,255,.12);
+      border-radius:10px;padding:6px 10px;cursor:pointer
+    }
+    #initialsBody{padding:14px 16px}
+    .slots{display:flex;gap:10px;justify-content:center;margin-bottom:12px}
+    .slot{
+      width:56px;height:64px;border-radius:12px;border:1px solid rgba(255,255,255,.16);
+      display:flex;align-items:center;justify-content:center;
+      font-weight:900;font-size:28px;background:#0f1330;color:#cfe9ff;
+      box-shadow: inset 0 -4px 0 rgba(255,255,255,.04);
+    }
+    #keypad{
+      display:grid;grid-template-columns:repeat(10,1fr);gap:6px;margin-top:8px
+    }
+    .key{
+      padding:10px 0;border-radius:10px;text-align:center;cursor:pointer;
+      background:#1a2045;border:1px solid rgba(255,255,255,.1);user-select:none
+    }
+    .key:hover{transform:translateY(-1px)}
+    .key.wide{grid-column:span 2}
+    .actions{display:flex;justify-content:space-between;gap:10px;margin-top:12px}
+    .btn{
+      padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.12);
+      background:var(--accent);color:#0b1020;font-weight:800;cursor:pointer;flex:1
+    }
+    .btn.secondary{background:#22274f;color:#e5e7eb}
+    .msg{margin-top:8px;font-size:12px;color:#9fb1c9;text-align:center}
+
+    /* Leaderboard*/
+    #leaderboard{
+      margin-top:16px;
+      padding:12px 14px;border-radius:14px;background:rgba(6,10,28,.6);
+      border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(8px);
+      min-width:260px;
+      box-shadow:0 14px 40px rgba(0,0,0,.45)
+    }
+    #leaderboard h3{margin:0 0 8px 0;font-size:14px;letter-spacing:.3px}
+    #boardList{font-size:13px;line-height:1.5}
+    .row{display:flex;justify-content:space-between;padding:2px 0}
+    .me{color:#bfe7ff}
+    .small{font-size:12px;color:#9fb1c9;margin-top:6px}
+
+    @media (max-width:720px){
+      #globeWrap{width:75vw;height:38vh}
+      .controls{left:auto;right:16px;transform:none}
+      #toggleMapBtn{right:16px;bottom:16px}
+      .slot{width:48px;height:56px;font-size:24px}
+    }
+  
+    /* --- Prevent revealing the location by clicking Google/Maps attribution --- */
+    .gm-style-cc, .gm-style-cc * { pointer-events: none !important; }
+  
+    /* Keep Google/Maps attribution visible but completely inert */
+    #pano a[href*="google"], #pano a[href*="maps.google"], .gm-style-cc a { pointer-events: none !important; cursor: default !important; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="pano"></div>
+
+    <div class="hud" id="hud">
+      <div class="chip"><span class="dot green"></span><span class="label">Round</span> <span id="roundNow">1</span>/ <span id="roundMax">5</span></div>
+      <div class="chip"><span class="dot yellow"></span><span class="label">Total</span> <span id="totalScore">0</span> pts</div>
+    </div>
+
+    <!-- Mini-map wrapper -->
+    <div id="globeWrap">
+      <div id="globeHeader">Click the globe to place your guess</div>
+      <div id="globe"></div>
+    </div>
+    <!-- Toggle button OVER the map -->
+    <button id="toggleMapBtn" aria-pressed="false" aria-controls="globeWrap" title="Hide mini map">Hide Map</button>
+
+    <!-- Initials Modal -->
+    <div id="initialsModal" role="dialog" aria-modal="true" aria-labelledby="initialsTitle">
+      <div id="initialsCard">
+        <div id="initialsHead">
+          <h4 id="initialsTitle">Submit Score</h4>
+          <button id="initialsClose">Cancel</button>
+        </div>
+        <div id="initialsBody">
+          <div class="slots">
+            <div class="slot" id="slot0">•</div>
+            <div class="slot" id="slot1">•</div>
+            <div class="slot" id="slot2">•</div>
+          </div>
+          <div id="keypad"></div>
+          <div class="actions">
+            <button class="btn secondary" id="btnClear">Clear</button>
+            <button class="btn" id="btnSubmit" disabled>Submit</button>
+          </div>
+          <div class="msg" id="initialsMsg"></div>
+
+          <!-- Leaderboard (shown only during initials entry at game end) -->
+          <div id="leaderboard">
+            <h3>🏆 Leaderboard (Top 10)</h3>
+            <div id="boardList">Loading…</div>
+            <div class="small">Enter your initials after the game (A–Z/0–9).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footerHelp">Tip: You can move around in Street View before guessing.</div>
+
+    <div class="controls">
+      <span class="hint" id="status">Loading a random location…</span>
+      <button id="btnGuess" disabled>Guess</button>
+      <button id="btnSkip" class="secondary">Skip</button>
+      <button id="btnNew" class="secondary" style="display:none">New Game</button>
+    </div>
+
+    <!-- Result overlay -->
+    <div id="result">
+      <div id="resultCard">
+        <div id="resultMap"></div>
+        <div id="resultInfo">
+          <div class="scoreLine">
+            <span class="pill" id="distanceText">—</span>
+            <span class="pill" id="locationName">—</span>
+            <span class="scoreBig" id="scoreThisRound">0</span><span>pts</span>
+            <span class="rounds" id="roundSummary"></span>
+          </div>
+          <div>
+            <button id="btnNext">Next Round</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Maps JS (Street View + Maps). Your API key is embedded -->
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAIujmdEMh04_ZfJB1kZ0839Fh_MI8pQAU&v=weekly&callback=initGame">
+  </script>
+
+  <script>
+    /* --- Neutralize map/watermark anchor clicks inside the pano --- */
+    function neutralizeGoogleLinks(){
+      try{
+        const container = document.getElementById('pano');
+        if(!container) return;
+        const anchors = container.querySelectorAll('a[href*="google."] , a[href*="maps.google"] , a[href*="google.com"]');
+        anchors.forEach(a => {
+          a.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); return false; }, true);
+        });
+      }catch(e){}
+    }
+    setInterval(neutralizeGoogleLinks, 800);
+
+    function cloakGoogleAnchors(){
+      try{
+        const roots = [
+          document.getElementById('pano'),
+          ...document.querySelectorAll('.gm-style, .gm-style-cc, .gmnoprint')
+        ].filter(Boolean);
+        roots.forEach(root => {
+          root.querySelectorAll('a').forEach(a => {
+            const href = a.getAttribute('href') || '';
+            if (/google\./i.test(href) || /maps\.google/i.test(href)){
+              if (!a.hasAttribute('data-ghost-href')) {
+                a.setAttribute('data-ghost-href', href);
+              }
+              if (a.hasAttribute('href')) a.removeAttribute('href');
+              if (a.hasAttribute('title')) a.removeAttribute('title');
+              a.setAttribute('aria-label','');
+              a.style.pointerEvents = 'none';
+              a.style.cursor = 'default';
+            }
+          });
+        });
+      }catch(e){}
+    }
+    function observeGoogleForCloak(){
+      try{
+        const target = document.getElementById('pano');
+        if(!target) return;
+        const obs = new MutationObserver(() => cloakGoogleAnchors());
+        obs.observe(target, { subtree: true, childList: true, attributes: true });
+      }catch(e){}
+    }
+    cloakGoogleAnchors();
+    observeGoogleForCloak();
+    setInterval(cloakGoogleAnchors, 1000);
+
+    /* ======= Game State ======= */
+    let pano, svService, guessMap, resultMap;
+    let currentActualLatLng = null;
+    let currentActualName = null;
+    let currentGuessLatLng = null;
+    let totalScore = 0;
+    let roundNow = 1;
+    const roundMax = 5;
+    let loadingNew = false;
+    let miniMapVisible = true;
+
+    /* ======= Supabase  */
+    const SUPABASE_URL = "https://ckajnizstineqlvwmelc.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrYWpuaXpzdGluZXFsdndtZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0NzY3OTUsImV4cCI6MjA3MTA1Mjc5NX0.UbexwbgzhICpCw5tUlwKH-sRvx6aFBWXOBFYbycbUKw";
+    const TOP_LIMIT = 10;
+    const NAME_LEN = 3;
+
+    async function sbFetch(path, init={}){
+      const headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        ...init.headers
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...init, headers });
+      if(!res.ok){
+        const t = await res.text().catch(()=> "error");
+        throw new Error(t);
+      }
+      return res.json();
+    }
+    async function saveScore(name, points){
+      name = sanitizeName(name);
+      if (name.length !== NAME_LEN) throw new Error("Name must be exactly 3 characters.");
+      const safePoints = Math.max(0, Math.round(points||0));
+      return sbFetch("scores", { method:"POST", body: JSON.stringify([{ name, points: safePoints }]) });
+    }
+    function sanitizeName(s){
+      return (s||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0, NAME_LEN);
+    }
+    async function getTopScores(limit=TOP_LIMIT){
+      const params = new URLSearchParams({
+        select:"*",
+        order:"points.desc,created_at.desc",
+        limit:String(limit)
+      }).toString();
+      return sbFetch(`scores?${params}`);
+    }
+    function renderLeaderboard(list, highlightName = null){
+      const el = document.getElementById("boardList");
+      if(!Array.isArray(list) || list.length===0){
+        el.innerHTML = "<div class='small'>No scores yet. Be the first!</div>";
+        return;
+      }
+      el.innerHTML = list.map((r,i)=>{
+        const you = highlightName && r.name === highlightName ? " me" : "";
+        const safeName = escapeHtml(r.name || "—");
+        return `<div class="row${you}"><span>${i+1}. ${safeName}</span><b>${r.points}</b></div>`;
+      }).join("");
+    }
+    function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m])); }
+    async function refreshLeaderboard(highlightName=null){
+      try{
+        const list = await getTopScores(TOP_LIMIT);
+        renderLeaderboard(list, highlightName);
+      }catch(e){
+        console.error("Leaderboard load failed", e);
+        const board = document.getElementById("boardList");
+        if (board) board.textContent = "Leaderboard unavailable.";
+      }
+    }
+
+    /* ======= Initials Modal Logic ======= */
+    let modalOpen = false;
+    let initials = ["","",""];
+    let onSubmitCallback = null;
+    let onCancelCallback = null;
+
+    function updateSlots(){
+      for(let i=0;i<3;i++){
+        const el = document.getElementById("slot"+i);
+        el.textContent = initials[i] || "•";
+      }
+      document.getElementById("btnSubmit").disabled = initials.join("").length !== 3;
+    }
+
+    function openInitialsModal(defaultValue=""){
+      initials = sanitizeName(defaultValue || localStorage.getItem("playerName3") || "").split("");
+      while(initials.length<3) initials.push("");
+      updateSlots();
+      document.getElementById("initialsMsg").textContent = "";
+      document.getElementById("initialsModal").style.display = "flex";
+      modalOpen = true;
+      refreshLeaderboard();
+    }
+    function closeInitialsModal(){
+      document.getElementById("initialsModal").style.display = "none";
+      modalOpen = false;
+    }
+
+    function appendChar(ch){
+      ch = sanitizeName(ch);
+      if(!ch) return;
+      for(let i=0;i<3;i++){
+        if(!initials[i]){ initials[i]=ch; break; }
+      }
+      updateSlots();
+    }
+    function backspace(){
+      for(let i=2;i>=0;i--){
+        if(initials[i]){ initials[i]=""; break; }
+      }
+      updateSlots();
+    }
+    function clearInitials(){
+      initials = ["","",""];
+      updateSlots();
+    }
+
+    function buildKeypad(){
+      const keys = [];
+      for(let i=65;i<=90;i++) keys.push(String.fromCharCode(i));
+      for(let i=48;i<=57;i++) keys.push(String.fromCharCode(i));
+      const pad = document.getElementById("keypad");
+      pad.innerHTML = "";
+      keys.forEach(k=>{
+        const b = document.createElement("div");
+        b.className = "key";
+        b.textContent = k;
+        b.addEventListener("click", ()=>appendChar(k));
+        pad.appendChild(b);
+      });
+      const bk = document.createElement("div");
+      bk.className="key wide";
+      bk.textContent="⌫ Back";
+      bk.addEventListener("click", backspace);
+      pad.appendChild(bk);
+
+      const sp = document.createElement("div");
+      sp.className="key wide";
+      sp.textContent="⟲ Clear";
+      sp.addEventListener("click", clearInitials);
+      pad.appendChild(sp);
+    }
+
+    function submitInitials(){
+      const name = initials.join("");
+      if(name.length!==3){
+        document.getElementById("initialsMsg").textContent = "Please enter exactly 3 characters.";
+        return;
+      }
+      localStorage.setItem("playerName3", name);
+      closeInitialsModal();
+      if (typeof onSubmitCallback === "function") onSubmitCallback(name);
+    }
+
+    function initInitialsUI(){
+      buildKeypad();
+      document.getElementById("btnClear").addEventListener("click", clearInitials);
+      document.getElementById("btnSubmit").addEventListener("click", submitInitials);
+      document.getElementById("initialsClose").addEventListener("click", ()=>{
+        closeInitialsModal();
+        if (typeof onCancelCallback === "function") onCancelCallback();
+      });
+      window.addEventListener("keydown", (e)=>{
+        if(!modalOpen) return;
+        if(e.key==="Escape"){ closeInitialsModal(); if(onCancelCallback) onCancelCallback(); }
+        else if(e.key==="Backspace"){ backspace(); e.preventDefault(); }
+        else if(/^[a-zA-Z0-9]$/.test(e.key)){ appendChar(e.key); }
+        else if(e.key==="Enter"){ if(initials.join("").length===3) submitInitials(); }
+      });
+    }
+
+    function askForInitials(){
+      return new Promise((resolve,reject)=>{
+        onSubmitCallback = (name)=> resolve(name);
+        onCancelCallback = ()=> reject(new Error("cancelled"));
+        openInitialsModal();
+      });
+    }
+
+    /* ======= Ports (updated list) ======= */
+    const PORTS = [
+      {name:'Aarhus, Denmark', lng:10.235, lat:56.148},
+      {name:'Abidjan (Cote D’Ivoire), Ivory Coast', lng:-4.016, lat:5.316},
+      {name:'Abu Dhabi, United Arab Emirates', lng:54.37, lat:24.495},
+      {name:'Acajutla, El Salvador', lng:-89.831, lat:13.594},
+      {name:'Acapulco, Mexico', lng:-99.905, lat:16.845},
+      {name:'Adelaide, Australia', lng:138.486, lat:-34.781},
+      {name:'Agadir, Morocco', lng:-9.623, lat:30.424},
+      {name:'Agios Nikolaos, Greece', lng:25.717, lat:35.191},
+      {name:'Airlie Beach, Australia', lng:148.717, lat:-20.267},
+      {name:'Aitutaki, Cook Islands', lng:-159.785, lat:-18.848},
+      {name:'Ajaccio, Corsica, France', lng:8.737, lat:41.918},
+      {name:'Akaroa, New Zealand', lng:172.967, lat:-43.807},
+      {name:'Akureyri, Iceland', lng:-18.087, lat:65.683},
+      {name:'Alanya, Turkey', lng:31.999, lat:36.542},
+      {name:'Alesund, Norway', lng:6.154, lat:62.473},
+      {name:'Alexandria, Egypt', lng:29.909, lat:31.205},
+      {name:'Alicante, Spain', lng:-0.481, lat:38.34},
+      {name:'Almeria, Spain', lng:-2.461, lat:36.832},
+      {name:'Alta, Norway', lng:23.271, lat:69.968},
+      {name:'Amber Cove, Dominican Republic', lng:-70.708, lat:19.836},
+      {name:'Amsterdam (Ijmuiden), Netherlands', lng:4.561, lat:52.464},
+      {name:'Amsterdam, Netherlands', lng:4.9, lat:52.376},
+      {name:'Andalsnes, Norway', lng:7.689, lat:62.567},
+      {name:'Antalya, Turkey', lng:30.611, lat:36.841},
+      {name:'Antsiranana, Madagascar', lng:49.291, lat:-12.28},
+      {name:'Aomori, Japan', lng:140.751, lat:40.834},
+      {name:'Apia, Samoa Islands', lng:-171.764, lat:-13.829},
+      {name:'Aqaba, Jordan', lng:35.002, lat:29.526},
+      {name:'Arequipa (Matarani), Peru', lng:-72.114, lat:-17.003},
+      {name:'Argostoli (Kefalonia), Greece', lng:20.489, lat:38.175},
+      {name:'Arica, Chile', lng:-70.338, lat:-18.477},
+      {name:'Arrecife (Lanzarote), Canary Islands', lng:-13.543, lat:28.963},
+      {name:'Ashmore Reef, Australia', lng:123.05, lat:-12.25},
+      {name:'Astoria, Oregon', lng:-123.832, lat:46.187},
+      {name:'Atacama Desert (Antofagasta), Chile', lng:-70.402, lat:-23.651},
+      {name:'Athens (Piraeus), Greece', lng:23.641, lat:37.942},
+      {name:'Auckland, New Zealand', lng:174.767, lat:-36.841},
+      {name:'Baie Comeau, Canada', lng:-68.15, lat:49.222},
+      {name:'Bali (Benoa), Indonesia', lng:115.216, lat:-8.74},
+      {name:'Bali (Celukan Bawang), Indonesia', lng:114.726, lat:-8.185},
+      {name:'Balneario (Camboriu), Brazil', lng:-48.635, lat:-26.992},
+      {name:'Baltimore, Maryland', lng:-76.582, lat:39.268},
+      {name:'Bangkok (Laem Chabang), Thailand', lng:100.895, lat:13.089},
+      {name:'Banjul, Gambia', lng:-16.579, lat:13.454},
+      {name:'Bar Harbor, Maine', lng:-68.205, lat:44.39},
+      {name:'Bar, Montenegro', lng:19.089, lat:42.097},
+      {name:'Barcelona, Spain', lng:2.158, lat:41.355},
+      {name:'Bari, Italy', lng:16.871, lat:41.128},
+      {name:'Basseterre, St. Kitts', lng:-62.722, lat:17.296},
+      {name:'Bay of Islands, New Zealand', lng:174.091, lat:-35.279},
+      {name:'Belfast, Northern Ireland', lng:-5.917, lat:54.612},
+      {name:'Belize City, Belize', lng:-88.186, lat:17.496},
+      {name:'Beppu, Japan', lng:131.505, lat:33.279},
+      {name:'Bergen, Norway', lng:5.32, lat:60.397},
+      {name:'Berlin (Rostock), Germany', lng:12.141, lat:54.093},
+      {name:'Berlin (Warnemünde), Germany', lng:12.089, lat:54.181},
+      {name:'Bilbao, Spain', lng:-3.008, lat:43.352},
+      {name:'Bimini, Bahamas', lng:-79.276, lat:25.746},
+      {name:'Bintan Island, Indonesia', lng:104.382, lat:1.211},
+      {name:'Boa Vista, Cape Verde', lng:-22.917, lat:16.183},
+      {name:'Bodrum, Turkey', lng:27.43, lat:37.034},
+      {name:'Bora Bora, French Polynesia', lng:-151.75, lat:-16.5},
+      {name:'Boracay, Philippines', lng:121.933, lat:11.967},
+      {name:'Bordeaux (Le Verdon), France', lng:-1.064, lat:45.553},
+      {name:'Boston, Massachusetts', lng:-71.05, lat:42.354},
+      {name:'Bozcaada, Turkey', lng:26.066, lat:39.829},
+      {name:'Bremerhaven, Germany', lng:8.575, lat:53.55},
+      {name:'Brest, France', lng:-4.495, lat:48.39},
+      {name:'Bridgetown, Barbados', lng:-59.632, lat:13.107},
+      {name:'Brisbane, Australia', lng:153.11, lat:-27.44},
+      {name:'Brooklyn, New York', lng:-74.006, lat:40.684},
+      {name:'Brussels / Bruges (Zeebrugge), Belgium', lng:3.207, lat:51.344},
+      {name:'Buenos Aires, Argentina', lng:-58.37, lat:-34.602},
+      {name:'Burnie (Tasmania), Australia', lng:145.917, lat:-41.05},
+      {name:'Busan, South Korea', lng:129.04, lat:35.1},
+      {name:'Buzios, Brazil', lng:-41.883, lat:-22.75},
+      {name:'Cabo Rojo, Dominican Republic', lng:-71.65, lat:17.933},
+      {name:'Cabo San Lucas, Mexico', lng:-109.914, lat:22.889},
+      {name:'Cagliari, Sardinia', lng:9.109, lat:39.207},
+      {name:'Cairns, Australia', lng:145.783, lat:-16.917},
+      {name:'Calypso Cove, Bahamas', lng:-77.27, lat:25.065},
+      {name:'Campbell River, Canada', lng:-125.25, lat:50.017},
+      {name:'Cannes, France', lng:7.017, lat:43.552},
+      {name:'Cape Town, South Africa', lng:18.435, lat:-33.918},
+      {name:'Cartagena, Colombia', lng:-75.533, lat:10.399},
+      {name:'Cartagena, Spain', lng:-0.983, lat:37.6},
+      {name:'Casablanca, Morocco', lng:-7.617, lat:33.6},
+      {name:'Castries, St. Lucia', lng:-61.0, lat:14.01},
+      {name:'Castro, Chile', lng:-73.767, lat:-42.48},
+      {name:'Catalina Island, California', lng:-118.327, lat:33.342},
+      {name:'Catalina Island, Dominican Republic', lng:-69.0, lat:18.367},
+      {name:'Catania, Italy', lng:15.09, lat:37.5},
+      {name:'Ceuta, Spain', lng:-5.307, lat:35.889},
+      {name:'Chania (Crete), Greece', lng:24.017, lat:35.517},
+      {name:'Charleston, South Carolina', lng:-79.933, lat:32.783},
+      {name:'Charlottetown, Prince Edward Island', lng:-63.117, lat:46.233},
+      {name:'Colón, Panama', lng:-79.905, lat:9.359},
+      {name:'Constanta, Romania', lng:28.65, lat:44.173},
+      {name:'Cooktown, Australia', lng:145.25, lat:-15.467},
+      {name:'Copenhagen, Denmark', lng:12.6, lat:55.706},
+      {name:'Coquimbo, Chile', lng:-71.343, lat:-29.953},
+      {name:'Corfu, Greece', lng:19.919, lat:39.62},
+      {name:'Corinto, Nicaragua', lng:-87.173, lat:12.484},
+      {name:'Cork (Cobh), Ireland', lng:-8.3, lat:51.85},
+      {name:'Cork (Ringaskiddy), Ireland', lng:-8.317, lat:51.833},
+      {name:'Corner Brook, Newfoundland', lng:-57.933, lat:48.95},
+      {name:'Costa Maya, Mexico', lng:-87.7, lat:18.73},
+      {name:'Cozumel, Mexico', lng:-86.95, lat:20.51},
+      {name:'Dakar, Senegal', lng:-17.447, lat:14.693},
+      {name:'Dammam, Saudi Arabia', lng:50.103, lat:26.427},
+      {name:'Dar Es Salaam, Tanzania', lng:39.27, lat:-6.823},
+      {name:'Dartmouth, United Kingdom', lng:-3.578, lat:50.351},
+      {name:'Darwin, Australia', lng:130.85, lat:-12.467},
+      {name:'Dingle, Ireland', lng:-10.267, lat:52.133},
+      {name:'Djupivogur, Iceland', lng:-14.293, lat:64.657},
+      {name:'Doha, Qatar', lng:51.545, lat:25.287},
+      {name:'Douglas (Isle of Man), United Kingdom', lng:-4.483, lat:54.15},
+      {name:'Dravuni, Fiji', lng:178.531, lat:-18.773},
+      {name:'Dubai, United Arab Emirates', lng:55.292, lat:25.265},
+      {name:'Dublin (Dun Laoghaire), Ireland', lng:-6.135, lat:53.293},
+      {name:'Dublin, Ireland', lng:-6.195, lat:53.347},
+      {name:'Dubrovnik, Croatia', lng:18.085, lat:42.658},
+      {name:'Dunedin (Port Chalmers), New Zealand', lng:170.623, lat:-45.814},
+      {name:'Durban, South Africa', lng:31.045, lat:-29.87},
+      {name:'Durres, Albania', lng:19.454, lat:41.312},
+      {name:'Dutch Harbor, Alaska', lng:-166.542, lat:53.889},
+      {name:'East London, South Africa', lng:27.9, lat:-33.018},
+      {name:'Eastport, Maine', lng:-66.985, lat:44.907},
+      {name:'Eden, Australia', lng:149.9, lat:-37.067},
+      {name:'Edinburgh (Newhaven), Scotland', lng:-3.2, lat:55.98},
+      {name:'Edinburgh (South Queensferry), Scotland', lng:-3.4, lat:55.99},
+      {name:'Eidfjord, Norway', lng:7.067, lat:60.468},
+      {name:'Eidsdal, Norway', lng:7.35, lat:62.183},
+      {name:'Ensenada, Mexico', lng:-116.617, lat:31.866},
+      {name:'Falmouth, England', lng:-5.067, lat:50.15},
+      {name:'Falmouth, Jamaica', lng:-77.655, lat:18.49},
+      {name:'Flåm, Norway', lng:7.114, lat:60.864},
+      {name:'Florence/Pisa (Livorno), Italy', lng:10.303, lat:43.551},
+      {name:'Florianopolis, Brazil', lng:-48.549, lat:-27.595},
+      {name:'Fort Dauphin (Toalagnaro), Madagascar', lng:46.983, lat:-25.031},
+      {name:'Fort de France, Martinique', lng:-61.067, lat:14.6},
+      {name:'Fortaleza, Brazil', lng:-38.543, lat:-3.717},
+      {name:'Foynes (Limerick), Ireland', lng:-9.106, lat:52.611},
+      {name:'Fredericia, Denmark', lng:9.767, lat:55.567},
+      {name:'Frederiksted, St. Croix', lng:-64.883, lat:17.717},
+      {name:'Fremantle, Australia', lng:115.75, lat:-32.05},
+      {name:'Fuerte Amador, Panama', lng:-79.55, lat:8.933},
+      {name:'Fujairah, United Arab Emirates', lng:56.333, lat:25.125},
+      {name:'Funchal, Madeira', lng:-16.9, lat:32.65},
+      {name:'Galveston, Texas', lng:-94.793, lat:29.31},
+      {name:'Galway, Ireland', lng:-9.05, lat:53.27},
+      {name:'Gaspésie, Québec', lng:-64.483, lat:48.833},
+      {name:'Gdynia, Poland', lng:18.55, lat:54.533},
+      {name:'Geiranger, Norway', lng:7.207, lat:62.1},
+      {name:'Genoa, Italy', lng:8.933, lat:44.407},
+      {name:'George Town, Grand Cayman', lng:-81.383, lat:19.3},
+      {name:'Geraldton, Australia', lng:114.6, lat:-28.767},
+      {name:'Gibraltar, United Kingdom', lng:-5.35, lat:36.133},
+      {name:'Gijón, Spain', lng:-5.7, lat:43.533},
+      {name:'Gisborne, New Zealand', lng:178.017, lat:-38.667},
+      {name:'Glasgow (Greenock), Scotland', lng:-4.75, lat:55.967},
+      {name:'Goa (Mormugao), India', lng:73.8, lat:15.416},
+      {name:'Gothenburg, Sweden', lng:11.967, lat:57.717},
+      {name:'Granada (Malaga), Spain', lng:-4.417, lat:36.717},
+      {name:'Grand Bahama Island, Bahamas', lng:-78.667, lat:26.533},
+      {name:'Grand Turk, Turks & Caicos Islands', lng:-71.133, lat:21.467},
+      {name:'Great Stirrup Cay, Bahamas', lng:-77.917, lat:25.817},
+      {name:'Greencastle, Ireland', lng:-7.05, lat:55.2},
+      {name:'Grundarfjordur, Iceland', lng:-23.267, lat:64.917},
+      {name:'Guernsey, Channel Islands, United Kingdom', lng:-2.536, lat:49.455},
+      {name:'Haines, Alaska', lng:-135.45, lat:59.233},
+      {name:'Hakodate, Japan', lng:140.733, lat:41.767},
+      {name:'Halifax, Nova Scotia', lng:-63.567, lat:44.65},
+      {name:'Hamburg (Kiel), Germany', lng:10.133, lat:54.317},
+      {name:'Hamburg, Germany', lng:9.993, lat:53.55},
+      {name:'Hammerfest, Norway', lng:23.683, lat:70.667},
+      {name:'Harstad, Norway', lng:16.55, lat:68.8},
+      {name:'Harvest Caye, Belize', lng:-88.3, lat:16.117},
+      {name:'Haugesund, Norway', lng:5.267, lat:59.417},
+      {name:'Hellesylt, Norway', lng:6.867, lat:62.083},
+      {name:'Helsingborg, Sweden', lng:12.7, lat:56.05},
+      {name:'Helsinki, Finland', lng:24.95, lat:60.167},
+      {name:'Heraklion (Crete), Greece', lng:25.148, lat:35.341},
+      {name:'Hilo, Hawaii', lng:-155.09, lat:19.729},
+      {name:'Himeji, Japan', lng:134.7, lat:34.817},
+      {name:'Hiroshima, Japan', lng:132.45, lat:34.383},
+      {name:'Ho Chi Minh City (Phu My), Vietnam', lng:107.05, lat:10.4},
+      {name:'Hobart, Tasmania, Australia', lng:147.333, lat:-42.883},
+      {name:'Holyhead, Wales, United Kingdom', lng:-4.633, lat:53.31},
+      {name:'Homer, Alaska', lng:-151.549, lat:59.643},
+      {name:'Honningsvåg, Norway', lng:25.967, lat:70.983},
+      {name:'Honolulu, Oahu', lng:-157.867, lat:21.307},
+      {name:'Horta, Azores', lng:-28.633, lat:38.533},
+      {name:'Houston, Texas', lng:-95.267, lat:29.73},
+      {name:'Huahine, French Polynesia', lng:-151.033, lat:-16.717},
+      {name:'Hualien, Taiwan', lng:121.617, lat:23.983},
+      {name:'Huatulco, Mexico', lng:-96.117, lat:15.772},
+      {name:'Hubbard Glacier, Alaska', lng:-139.6, lat:60.05},
+      {name:'Hvar, Croatia', lng:16.442, lat:43.172},
+      {name:'Ibiza, Spain', lng:1.435, lat:38.91},
+      {name:'Icy Strait Point, Alaska', lng:-135.44, lat:58.293},
+      {name:'Ilha Grande, Brazil', lng:-44.233, lat:-23.15},
+      {name:'Ilhabela, Brazil', lng:-45.355, lat:-23.778},
+      {name:'Inverness (Invergordon), Scotland', lng:-4.167, lat:57.683},
+      {name:'Iquique, Chile', lng:-70.15, lat:-20.216},
+      {name:'Isafjordur, Iceland', lng:-23.15, lat:66.067},
+      {name:'Ishigaki, Japan', lng:124.167, lat:24.333},
+      {name:'Isle of Pines, New Caledonia', lng:167.483, lat:-22.617},
+      {name:'Istanbul, Turkey', lng:28.95, lat:41.013},
+      {name:'Ittoqqortoormiit, Greenland', lng:-21.966, lat:70.484},
+      {name:'Izmir (Ephesus), Turkey', lng:27.128, lat:38.419},
+      {name:'Jacksonville, Florida', lng:-81.583, lat:30.4},
+      {name:'Jakarta, Indonesia', lng:106.817, lat:-6.117},
+      {name:'Jeddah, Saudi Arabia', lng:39.192, lat:21.485},
+      {name:'Jeju, South Korea', lng:126.533, lat:33.517},
+      {name:'Jerusalem (Ashdod), Israel', lng:34.65, lat:31.817},
+      {name:'Juneau, Alaska', lng:-134.417, lat:58.3},
+      {name:'Kagoshima, Japan', lng:130.567, lat:31.6},
+      {name:'Kahului, Maui', lng:-156.431, lat:20.897},
+      {name:'Kangaroo Island, Australia', lng:137.217, lat:-35.833},
+      {name:'Kaohsiung, Taiwan', lng:120.3, lat:22.627},
+      {name:'Karlskrona, Sweden', lng:15.583, lat:56.167},
+      {name:'Kavala, Greece', lng:24.401, lat:40.939},
+      {name:'Ketchikan (Ward Cove), Alaska', lng:-131.719, lat:55.355},
+      {name:'Key West, Florida', lng:-81.76, lat:24.56},
+      {name:'Keystone Canyon (Valdez), Alaska', lng:-146.217, lat:61.133},
+      {name:'Khasab, Oman', lng:56.247, lat:26.191},
+      {name:'Killybegs, Ireland', lng:-8.45, lat:54.633},
+      {name:'Kingstown, St. Vincent & The Grenadines', lng:-61.233, lat:13.15},
+      {name:'Kirkwall, Orkney Isles, Scotland', lng:-2.95, lat:58.983},
+      {name:'Klaipeda, Lithuania', lng:21.133, lat:55.717},
+      {name:'Ko Samui, Thailand', lng:100.017, lat:9.467},
+      {name:'Kochi, Japan', lng:133.55, lat:33.5},
+      {name:'Kodiak, Alaska', lng:-152.407, lat:57.79},
+      {name:'Kona, Hawaii', lng:-155.996, lat:19.64},
+      {name:'Koper, Slovenia', lng:13.733, lat:45.55},
+      {name:'Korcula, Croatia', lng:17.133, lat:42.95},
+      {name:'Kos, Greece', lng:27.287, lat:36.893},
+      {name:'Kota Kinabalu, Malaysia', lng:116.073, lat:5.98},
+      {name:'Kotka (Hamina), Finland', lng:26.95, lat:60.467},
+      {name:'Kotor, Montenegro', lng:18.771, lat:42.425},
+      {name:'Kralendijk, Bonaire', lng:-68.267, lat:12.15},
+      {name:'Kristiansand, Norway', lng:8.0, lat:58.15},
+      {name:'Kristiansund, Norway', lng:7.73, lat:63.11},
+      {name:'Kuala Lumpur (Port Klang), Malaysia', lng:101.35, lat:2.983},
+      {name:'Kusadasi, Turkey', lng:27.257, lat:37.86},
+      {name:'Kyoto (Kobe), Japan', lng:135.195, lat:34.69},
+      {name:'Kyoto (Osaka), Japan', lng:135.502, lat:34.693},
+      {name:'La Coruña, Spain', lng:-8.4, lat:43.367},
+      {name:'La Digue, Seychelles', lng:55.833, lat:-4.35},
+      {name:'La Goulette, Tunisia', lng:10.3, lat:36.817},
+      {name:'La Rochelle, France', lng:-1.15, lat:46.15},
+      {name:'La Spezia, Italy', lng:9.817, lat:44.1},
+      {name:'Lahaina (Maui), Hawaii', lng:-156.678, lat:20.878},
+      {name:'Langkawi, Malaysia', lng:99.8, lat:6.3},
+      {name:'Larnaca, Cyprus', lng:33.633, lat:34.917},
+      {name:'Las Palmas, Canary Islands', lng:-15.417, lat:28.133},
+      {name:'Lautoka, Fiji', lng:177.45, lat:-17.617},
+      {name:'Leknes (Lofoten Islands), Norway', lng:13.6, lat:68.15},
+      {name:'Lerwick, Shetland Islands, Scotland', lng:-1.15, lat:60.15},
+      {name:'Lifou, New Caledonia', lng:167.267, lat:-20.917},
+      {name:'Lima (Callao), Peru', lng:-77.15, lat:-12.067},
+      {name:'Limassol, Cyprus', lng:33.05, lat:34.683},
+      {name:'Lisbon, Portugal', lng:-9.133, lat:38.717},
+      {name:'Liverpool, United Kingdom', lng:-3.0, lat:53.4},
+      {name:'London (Dover), United Kingdom', lng:1.317, lat:51.133},
+      {name:'London (Southampton), United Kingdom', lng:-1.4, lat:50.9},
+      {name:'London (Tilbury), England', lng:0.35, lat:51.467},
+      {name:'Londonderry, Northern Ireland', lng:-7.3, lat:55.0},
+      {name:'Longyearbyen (Svalbard), Norway', lng:15.633, lat:78.217},
+      {name:'Los Angeles, California', lng:-118.27, lat:33.74},
+      {name:'Luanda, Angola', lng:13.233, lat:-8.833},
+      {name:'Luderitz, Namibia', lng:15.167, lat:-26.65},
+      {name:'Luganville, Vanuatu', lng:167.167, lat:-15.517},
+      {name:'Lyttelton, New Zealand', lng:172.717, lat:-43.6},
+      {name:'Maceio, Brazil', lng:-35.733, lat:-9.667},
+      {name:'Malé, Maldives', lng:73.509, lat:4.175},
+      {name:'Maloy, Norway', lng:5.117, lat:61.933},
+      {name:'Manama, Bahrain', lng:50.583, lat:26.217},
+      {name:'Mangalore, India', lng:74.85, lat:12.917},
+      {name:'Manila, Philippines', lng:120.967, lat:14.583},
+      {name:'Manta, Ecuador', lng:-80.717, lat:-0.967},
+      {name:'Manzanillo, Mexico', lng:-104.317, lat:19.05},
+      {name:'Maputo, Mozambique', lng:32.583, lat:-25.967},
+      {name:'Maré, New Caledonia', lng:168.05, lat:-21.533},
+      {name:'Marghera, Italy', lng:12.25, lat:45.467},
+      {name:'Marlborough (Picton), New Zealand', lng:174.0, lat:-41.3},
+      {name:'Marmaris, Turkey', lng:28.267, lat:36.85},
+      {name:'Martha\'s Vineyard', lng:-70.667, lat:41.383},
+      {name:'Mazatlán, Mexico', lng:-106.417, lat:23.217},
+      {name:'Melaka, Malaysia', lng:102.25, lat:2.2},
+      {name:'Melbourne, Australia', lng:144.967, lat:-37.817},
+      {name:'Melillia, Spain', lng:-2.95, lat:35.3},
+      {name:'Messina (Sicily), Italy', lng:15.55, lat:38.183},
+      {name:'Miami, Florida', lng:-80.179, lat:25.778},
+      {name:'Miyakojima (Okinawa), Japan', lng:125.283, lat:24.8},
+      {name:'Miyazaki (Aburatsu), Japan', lng:131.417, lat:31.583},
+      {name:'Mombasa, Kenya', lng:39.667, lat:-4.05},
+      {name:'Monte Carlo, Monaco', lng:7.424, lat:43.738},
+      {name:'Montego Bay, Jamaica', lng:-77.933, lat:18.467},
+      {name:'Monterey, California', lng:-121.9, lat:36.6},
+      {name:'Montevideo, Uruguay', lng:-56.2, lat:-34.9},
+      {name:'Moorea, French Polynesia', lng:-149.833, lat:-17.533},
+      {name:'Mossel Bay, South Africa', lng:22.133, lat:-34.183},
+      {name:'Motril, Spain', lng:-3.517, lat:36.75},
+      {name:'Muara, Brunei Darussalam', lng:115.067, lat:5.033},
+      {name:'Mumbai, India', lng:72.817, lat:18.95},
+      {name:'Muscat, Oman', lng:58.567, lat:23.617},
+      {name:'Mykonos, Greece', lng:25.333, lat:37.45},
+      {name:'Mystery Island, Vanuatu', lng:169.767, lat:-20.25},
+      {name:'Mytilini (Lesbos), Greece', lng:26.55, lat:39.1},
+      {name:'Nafplion, Greece', lng:22.8, lat:37.567},
+      {name:'Nanortalik, Greenland', lng:-45.237, lat:60.141},
+      {name:'Napier, New Zealand', lng:176.917, lat:-39.483},
+      {name:'Naples, Italy', lng:14.267, lat:40.85},
+      {name:'Narvik, Norway', lng:17.433, lat:68.433},
+      {name:'Nassau, Bahamas', lng:-77.333, lat:25.067},
+      {name:'Nāwiliwili, Kaua`i', lng:-159.35, lat:21.95},
+      {name:'Nessebar (Bourgas), Bulgaria', lng:27.733, lat:42.65},
+      {name:'Nessebar, Bulgaria', lng:27.733, lat:42.65},
+      {name:'New Orleans, Louisiana', lng:-90.067, lat:29.95},
+      {name:'New York, New York', lng:-74.014, lat:40.705},
+      {name:'Newcastle (Tyne), England', lng:-1.6, lat:54.967},
+      {name:'Newcastle, Australia', lng:151.783, lat:-32.917},
+      {name:'Newport, Rhode Island', lng:-71.31, lat:41.49},
+      {name:'Nha Trang, Vietnam', lng:109.183, lat:12.25},
+      {name:'Nice/Monaco (Villefranche), France', lng:7.31, lat:43.704},
+      {name:'Nordfjordeid, Norway', lng:6.017, lat:61.9},
+      {name:'Nosy Be, Madagascar', lng:48.267, lat:-13.4},
+      {name:'Nouméa, New Caledonia', lng:166.45, lat:-22.267},
+      {name:'Nuku Hiva, French Polynesia', lng:-140.083, lat:-8.933},
+      {name:'Nuuk, Greenland', lng:-51.721, lat:64.183},
+      {name:'Ocho Rios, Jamaica', lng:-77.103, lat:18.407},
+      {name:'Odessa, Ukraine', lng:30.733, lat:46.483},
+      {name:'Olden, Norway', lng:6.867, lat:61.833},
+      {name:'Olympia (Katakolon), Greece', lng:21.317, lat:37.65},
+      {name:'Oporto (Leixoes), Portugal', lng:-8.7, lat:41.183},
+      {name:'Oporto, Portugal', lng:-8.617, lat:41.15},
+      {name:'Oranjestad, Aruba', lng:-70.033, lat:12.517},
+      {name:'Orlando (Port Canaveral), Florida', lng:-80.63, lat:28.41},
+      {name:'Oslo, Norway', lng:10.75, lat:59.913},
+      {name:'Paamiut (Frederikshab), Greenland', lng:-49.667, lat:61.994},
+      {name:'Pago Pago, American Samoa', lng:-170.7, lat:-14.283},
+      {name:'Palermo (Sicily), Italy', lng:13.367, lat:38.133},
+      {name:'Palma (Majorca), Spain', lng:2.65, lat:39.567},
+      {name:'Panama Canal (Gatun Lake), Panama', lng:-79.917, lat:9.25},
+      {name:'Panama City (Colón), Panama', lng:-79.9, lat:9.35},
+      {name:'Panama City (Fuerte Amador), Panama', lng:-79.55, lat:8.933},
+      {name:'Panama City (Pacific Cruise Terminal), Panama', lng:-79.583, lat:8.95},
+      {name:'Papeete (Tahiti), French Polynesia', lng:-149.567, lat:-17.533},
+      {name:'Paris (Cherbourg), France', lng:-1.617, lat:49.65},
+      {name:'Paris (Le Havre), France', lng:0.107, lat:49.493},
+      {name:'Paros, Greece', lng:25.15, lat:37.083},
+      {name:'Patmos, Greece', lng:26.55, lat:37.317},
+      {name:'Pauillac, France', lng:-0.75, lat:45.2},
+      {name:'Penang, Malaysia', lng:100.333, lat:5.417},
+      {name:'Petropavlovsk, Russia', lng:158.65, lat:53.017},
+      {name:'Philadelphia, Pennsylvania', lng:-75.167, lat:39.95},
+      {name:'Philipsburg, St. Maarten', lng:-63.05, lat:18.017},
+      {name:'Phillip Island, Australia', lng:145.233, lat:-38.483},
+      {name:'Phu Quoc, Vietnam', lng:103.963, lat:10.227},
+      {name:'Phuket, Thailand', lng:98.4, lat:7.883},
+      {name:'Pionersky, Russia', lng:20.233, lat:54.95},
+      {name:'Piran, Slovenia', lng:13.567, lat:45.527},
+      {name:'Pisco, Peru', lng:-76.217, lat:-13.7},
+      {name:'Pointe a Pitre, Guadeloupe', lng:-61.533, lat:16.233},
+      {name:'Pointe Des Galets, Reunion', lng:55.3, lat:-20.933},
+      {name:'Pomene, Mozambique', lng:35.6, lat:-22.9},
+      {name:'Ponce, Puerto Rico', lng:-66.617, lat:17.967},
+      {name:'Ponta Delgada, Azores', lng:-25.667, lat:37.733},
+      {name:'Port Arthur, Australia', lng:147.85, lat:-43.15},
+      {name:'Port Douglas, Australia', lng:145.467, lat:-16.483},
+      {name:'Port Elizabeth (Gqeberha), South Africa', lng:25.6, lat:-33.967},
+      {name:'Port Kembla, Australia', lng:150.9, lat:-34.467},
+      {name:'Port Lincoln, Australia', lng:135.867, lat:-34.717},
+      {name:'Port Louis, Mauritius', lng:57.5, lat:-20.167},
+      {name:'Port Said, Egypt', lng:32.3, lat:31.267},
+      {name:'Port Victoria, Seychelles', lng:55.45, lat:-4.617},
+      {name:'Port Vila, Vanuatu', lng:168.3, lat:-17.75},
+      {name:'Portimão, Portugal', lng:-8.533, lat:37.133},
+      {name:'Portland, Australia', lng:141.6, lat:-38.35},
+      {name:'Portland, England', lng:-2.45, lat:50.567},
+      {name:'Portland, Maine', lng:-70.255, lat:43.66},
+      {name:'Porto Belo, Brazil', lng:-48.55, lat:-27.15},
+      {name:'Porto Grande, Cape Verde', lng:-25.0, lat:16.883},
+      {name:'Praia da Vitoria, Portugal', lng:-27.067, lat:38.717},
+      {name:'Praia, Cape Verde', lng:-23.517, lat:14.933},
+      {name:'Praslin, Seychelles', lng:55.733, lat:-4.317},
+      {name:'Prince Rupert, British Columbia', lng:-130.317, lat:54.317},
+      {name:'Progreso, Mexico', lng:-89.667, lat:21.283},
+      {name:'Provence (Marseille), France', lng:5.367, lat:43.3},
+      {name:'Puerto Chacabuco, Chile', lng:-72.817, lat:-45.467},
+      {name:'Puerto Chiapas, Mexico', lng:-92.4, lat:14.69},
+      {name:'Puerto del Rosario (Canary Islands), Spain', lng:-13.867, lat:28.5},
+      {name:'Puerto Limon, Costa Rica', lng:-83.033, lat:9.983},
+      {name:'Puerto Madryn, Argentina', lng:-65.033, lat:-42.767},
+      {name:'Puerto Montt, Chile', lng:-72.933, lat:-41.467},
+      {name:'Puerto Plata, Dominican Republic', lng:-70.7, lat:19.8},
+      {name:'Puerto Princesa, Philippines', lng:118.75, lat:9.75},
+      {name:'Puerto Quetzal, Guatemala', lng:-90.783, lat:13.917},
+      {name:'Puerto Vallarta, Mexico', lng:-105.25, lat:20.6},
+      {name:'Punta Arenas, Chile', lng:-70.933, lat:-53.167},
+      {name:'Punta Cana (Cap Cana), Dominican Republic', lng:-68.4, lat:18.467},
+      {name:'Punta Cana (La Romana), Dominican Republic', lng:-68.967, lat:18.417},
+      {name:'Punta del Este, Uruguay', lng:-54.95, lat:-34.95},
+      {name:'Puntarenas (Puerto Caldera), Costa Rica', lng:-84.833, lat:9.917},
+      {name:'Puntarenas, Costa Rica', lng:-84.833, lat:9.967},
+      {name:'Qaqortoq, Greenland', lng:-46.033, lat:60.717},
+      {name:'Québec City, Canada', lng:-71.2, lat:46.817},
+      {name:'Raiatea, French Polynesia', lng:-151.45, lat:-16.75},
+      {name:'Rangiroa, French Polynesia', lng:-147.633, lat:-14.967},
+      {name:'Rarotonga, Cook Islands', lng:-159.783, lat:-21.233},
+      {name:'Recife, Brazil', lng:-34.883, lat:-8.05},
+      {name:'Reggio Calabria, Italy', lng:15.65, lat:38.117},
+      {name:'Reykjavik, Iceland', lng:-21.95, lat:64.15},
+      {name:'Rhodes, Greece', lng:28.217, lat:36.45},
+      {name:'Richards Bay, South Africa', lng:32.083, lat:-28.8},
+      {name:'Riga, Latvia', lng:24.1, lat:56.95},
+      {name:'Rijeka, Croatia', lng:14.442, lat:45.327},
+      {name:'Rio de Janeiro, Brazil', lng:-43.167, lat:-22.9},
+      {name:'Rio Grande do Sul, Brazil', lng:-52.1, lat:-32.033},
+      {name:'Roatán (Bay Islands), Honduras', lng:-86.55, lat:16.317},
+      {name:'Rockland, Maine', lng:-69.1, lat:44.1},
+      {name:'Rome (Civitavecchia), Italy', lng:11.783, lat:42.1},
+      {name:'Ronne, Bornholm, Denmark', lng:14.717, lat:55.1},
+      {name:'Roseau, Dominica', lng:-61.4, lat:15.3},
+      {name:'Rotterdam, Netherlands', lng:4.133, lat:51.95},
+      {name:'Royal Naval Dockyard, Bermuda', lng:-64.833, lat:32.333},
+      {name:'Safaga, Egypt', lng:33.933, lat:26.733},
+      {name:'Saguenay (La Baie), Québec', lng:-70.883, lat:48.333},
+      {name:'Saint John, Bay of Fundy, New Brunswick', lng:-66.067, lat:45.267},
+      {name:'Saint-Tropez, France', lng:6.633, lat:43.267},
+      {name:'Salalah, Oman', lng:54.1, lat:17.017},
+      {name:'Salerno, Italy', lng:14.767, lat:40.683},
+      {name:'Salomague, Philippines', lng:120.467, lat:17.7},
+      {name:'Salvador De Bahia, Brazil', lng:-38.517, lat:-12.983},
+      {name:'San Andres, Colombia', lng:-81.7, lat:12.55},
+      {name:'San Diego, California', lng:-117.167, lat:32.717},
+      {name:'San Francisco, California', lng:-122.39, lat:37.79},
+      {name:'San Juan del Sur, Nicaragua', lng:-85.867, lat:11.25},
+      {name:'San Juan, Puerto Rico', lng:-66.116, lat:18.465},
+      {name:'San Sebastian de La Gomera, Canary Islands', lng:-17.1, lat:28.083},
+      {name:'Sandnessjoen, Norway', lng:12.633, lat:66.017},
+      {name:'Santa Barbara, California', lng:-119.7, lat:34.417},
+      {name:'Santa Cruz de la Palma, Spain', lng:-17.767, lat:28.683},
+      {name:'Santa Cruz de Tenerife, Canary Islands', lng:-16.25, lat:28.467},
+      {name:'Santa Maria, Cape Verde', lng:-22.9, lat:16.6},
+      {name:'Santa Marta, Colombia', lng:-74.2, lat:11.25},
+      {name:'Santiago (San Antonio), Chile', lng:-71.617, lat:-33.6},
+      {name:'Santo Domingo, Dominican Republic', lng:-69.9, lat:18.467},
+      {name:'Santo Tomas de Castilla, Guatemala', lng:-88.6, lat:15.7},
+      {name:'Santorini, Greece', lng:25.467, lat:36.4},
+      {name:'São Paulo (Santos), Brazil', lng:-46.3, lat:-23.967},
+      {name:'Sao Tome, Sao Tome and Principe', lng:6.733, lat:0.333},
+      {name:'Sarande, Albania', lng:20.017, lat:39.867},
+      {name:'Savusavu, Fiji', lng:179.333, lat:-16.783},
+      {name:'Scarborough, Trinidad and Tobago', lng:-60.733, lat:11.183},
+      {name:'Seattle, Washington', lng:-122.333, lat:47.6},
+      {name:'Semarang, Indonesia', lng:110.417, lat:-6.967},
+      {name:'Seoul (Incheon), South Korea', lng:126.617, lat:37.467},
+      {name:'Sept-Iles, Canada', lng:-66.383, lat:50.2},
+      {name:'Seville (Cadiz), Spain', lng:-6.283, lat:36.533},
+      {name:'Seward, Alaska', lng:-149.433, lat:60.117},
+      {name:'Seydisfjordur, Iceland', lng:-14.0, lat:65.267},
+      {name:'Sharm el Sheikh, Egypt', lng:34.333, lat:27.917},
+      {name:'Shelburne, Nova Scotia', lng:-65.317, lat:43.767},
+      {name:'Singapore, Singapore', lng:103.833, lat:1.267},
+      {name:'Sir Bani Yas, United Arab Emirates', lng:52.58, lat:24.287},
+      {name:'Siracusa (Sicily), Italy', lng:15.283, lat:37.067},
+      {name:'Sitka, Alaska', lng:-135.333, lat:57.05},
+      {name:'Skagen, Denmark', lng:10.6, lat:57.717},
+      {name:'Skagway, Alaska', lng:-135.317, lat:59.45},
+      {name:'Skjolden, Norway', lng:7.583, lat:61.5},
+      {name:'Sokhna, Egypt', lng:32.317, lat:29.6},
+      {name:'Sorrento (Capri), Italy', lng:14.383, lat:40.617},
+      {name:'Split, Croatia', lng:16.433, lat:43.5},
+      {name:'St. Croix, U.S. Virgin Islands', lng:-64.833, lat:17.717},
+      {name:'St. George\'s, Grenada', lng:-61.75, lat:12.05},
+      {name:'St. John\'s (Newfoundland), Canada', lng:-52.717, lat:47.567},
+      {name:'St. John\'s, Antigua', lng:-61.85, lat:17.117},
+      {name:'St. Petersburg, Russia', lng:30.283, lat:59.933},
+      {name:'St. Pierre & Miquelon, France', lng:-56.2, lat:46.783},
+      {name:'St. Thomas, US Virgin Islands', lng:-64.933, lat:18.333},
+      {name:'Stanley, Falkland Islands', lng:-57.85, lat:-51.7},
+      {name:'Stavanger, Norway', lng:5.733, lat:58.967},
+      {name:'Stockholm (Nynashamn), Sweden', lng:17.95, lat:58.9},
+      {name:'Stockholm, Sweden', lng:18.067, lat:59.333},
+      {name:'Stornoway, United Kingdom', lng:-6.383, lat:58.217},
+      {name:'Surabaya, Indonesia', lng:112.733, lat:-7.217},
+      {name:'Suva, Fiji', lng:178.417, lat:-18.133},
+      {name:'Svolvaer, Norway', lng:14.567, lat:68.233},
+      {name:'Sydney, Australia', lng:151.217, lat:-33.85},
+      {name:'Sydney, Cape Breton Island, Nova Scotia', lng:-60.183, lat:46.133},
+      {name:'Taipei (Keelung), Taiwan', lng:121.733, lat:25.15},
+      {name:'Tallinn, Estonia', lng:24.75, lat:59.433},
+      {name:'Tampa, Florida', lng:-82.45, lat:27.95},
+      {name:'Tangier, Morocco', lng:-5.817, lat:35.783},
+      {name:'Taormina (Sicily), Italy', lng:15.3, lat:37.85},
+      {name:'Taranto, Italy', lng:17.233, lat:40.467},
+      {name:'Tarragona, Spain', lng:1.25, lat:41.117},
+      {name:'Tauranga, New Zealand', lng:176.167, lat:-37.683},
+      {name:'Tel-Aviv (Haifa), Israel', lng:35.0, lat:32.817},
+      {name:'Thessaloniki, Greece', lng:22.95, lat:40.633},
+      {name:'Timaru, New Zealand', lng:171.25, lat:-44.4},
+      {name:'Torshavn, Faroe Islands', lng:-6.767, lat:62.017},
+      {name:'Tortola, British Virgin Islands', lng:-64.617, lat:18.417},
+      {name:'Toulon, France', lng:5.933, lat:43.117},
+      {name:'Townsville, Australia', lng:146.817, lat:-19.25},
+      {name:'Trieste, Italy', lng:13.767, lat:45.65},
+      {name:'Tromsø, Norway', lng:18.95, lat:69.65},
+      {name:'Trondheim, Norway', lng:10.4, lat:63.433},
+      {name:'Trujillo (Salaverry), Peru', lng:-78.983, lat:-8.2},
+      {name:'Ullapool, United Kingdom', lng:-5.167, lat:57.9},
+      {name:'Ulvik, Norway', lng:6.917, lat:60.567},
+      {name:'Ushuaia, Argentina', lng:-68.3, lat:-54.8},
+      {name:'Valencia, Spain', lng:-0.367, lat:39.467},
+      {name:'Valletta, Malta', lng:14.517, lat:35.9},
+      {name:'Vancouver, British Columbia', lng:-123.117, lat:49.283},
+      {name:'Varna, Bulgaria', lng:27.917, lat:43.217},
+      {name:'Vava\'u, Tonga', lng:-173.983, lat:-18.65},
+      {name:'Venice (Ravenna), Italy', lng:12.2, lat:44.417},
+      {name:'Venice (Trieste), Italy', lng:13.767, lat:45.65},
+      {name:'Victoria, British Columbia', lng:-123.367, lat:48.433},
+      {name:'Vigo, Spain', lng:-8.733, lat:42.217},
+      {name:'Virginia Beach (Norfolk), Virginia', lng:-76.3, lat:36.85},
+      {name:'Visby, Sweden', lng:18.3, lat:57.633},
+      {name:'Volos, Greece', lng:22.933, lat:39.367},
+      {name:'Walvis Bay, Namibia', lng:14.5, lat:-22.95},
+      {name:'Waterford, Ireland', lng:-7.117, lat:52.267},
+      {name:'Wellington, New Zealand', lng:174.783, lat:-41.283},
+      {name:'Whangarei, New Zealand', lng:174.317, lat:-35.717},
+      {name:'Whittier, Alaska', lng:-148.683, lat:60.783},
+      {name:'Willemstad, Curaçao', lng:-68.933, lat:12.1},
+      {name:'Yanbu, Saudi Arabia', lng:38.063, lat:24.088},
+      {name:'Zadar, Croatia', lng:15.217, lat:44.117},
+      {name:'Zakynthos, Greece', lng:20.9, lat:37.783},
+      {name:'Zanzibar, Tanzania', lng:39.2, lat:-6.167},
+      {name:'Zihuatanejo Ixtapa, Mexico', lng:-101.55, lat:17.633},
+    ];
+
+    // constants
+    const EARTH_R_KM = 6371;
+    const LIMIT_MI = 1;
+    const LIMIT_KM = LIMIT_MI * 1.609344;
+    const SEARCH_RADIUS_M = 2500;
+
+    /* ======= Utilities ======= */
+    function rand(min, max){ return Math.random()*(max-min)+min; }
+    function toRad(d){ return d*Math.PI/180; }
+    function toDeg(r){ return r*180/Math.PI; }
+    function haversineKm(a, b){
+      const dLat = toRad(b.lat()-a.lat());
+      const dLng = toRad(b.lng()-a.lng());
+      const s1 = Math.sin(dLat/2), s2 = Math.sin(dLng/2);
+      const A = s1*s1 + Math.cos(toRad(a.lat()))*Math.cos(toRad(b.lat()))*s2*s2;
+      const c = 2*Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
+      return EARTH_R_KM*c;
+    }
+    function offsetLatLng(lat, lng, distKm, bearingDeg){
+      const δ = distKm / EARTH_R_KM;
+      const θ = toRad(bearingDeg);
+      const φ1 = toRad(lat);
+      const λ1 = toRad(lng);
+      const sinφ1 = Math.sin(φ1), cosφ1 = Math.cos(φ1);
+      const sinδ = Math.sin(δ), cosδ = Math.cos(δ);
+      const sinφ2 = sinφ1 * cosδ + cosφ1 * sinδ * Math.cos(θ);
+      const φ2 = Math.asin(sinφ2);
+      const y = Math.sin(θ) * sinδ * cosφ1;
+      const x = cosδ - sinφ1 * sinφ2;
+      const λ2 = λ1 + Math.atan2(y, x);
+      let lng2 = toDeg(λ2);
+      lng2 = ((lng2 + 540) % 360) - 180;
+      return new google.maps.LatLng(toDeg(φ2), lng2);
+    }
+    function randomPointWithin(lat, lng, radiusKm){
+      const r = radiusKm * Math.sqrt(Math.random());
+      const bearing = rand(0, 360);
+      return offsetLatLng(lat, lng, r, bearing);
+    }
+    function scoreFromDistanceKm(d){
+      const s = 5000*Math.exp(-d/2000);
+      return Math.max(0, Math.round(s));
+    }
+    function setStatus(txt){ document.getElementById('status').textContent = txt; }
+
+    function nearestPortName(latLng){
+      let best = null;
+      let bestD = Infinity;
+      for (const p of PORTS){
+        const d = haversineKm(new google.maps.LatLng(p.lat, p.lng), latLng);
+        if (d < bestD){
+          bestD = d;
+          best = p;
+        }
+      }
+      return bestD <= LIMIT_KM ? (best?.name || null) : null;
+    }
+
+    /* ======= Core Flow (restricted to within port radius) ======= */
+    async function loadRandomPano(maxTries=60){
+      loadingNew = true;
+      setStatus('Finding a Street View spot near a cruise port…');
+      return new Promise((resolve, reject)=>{
+        let tries = 0;
+        (function attempt(){
+          if (tries++ >= maxTries){ reject(new Error('No panorama found near ports.')); return; }
+          const base = PORTS[Math.floor(Math.random()*PORTS.length)];
+          const candidate = randomPointWithin(base.lat, base.lng, LIMIT_KM * 0.98);
+          svService.getPanorama(
+            { location: candidate, radius: SEARCH_RADIUS_M, preference: google.maps.StreetViewPreference.BEST, source: google.maps.StreetViewSource.OUTDOOR },
+            (data, status)=>{
+              if (status === google.maps.StreetViewStatus.OK && data && data.location && data.location.latLng){
+                const panoLatLng = data.location.latLng;
+                let within = false;
+                for (const p of PORTS){
+                  const d = haversineKm(new google.maps.LatLng(p.lat,p.lng), panoLatLng);
+                  if (d <= LIMIT_KM){ within = true; break; }
+                }
+                if (within){ resolve(data); }
+                else { setStatus(`Searching near ports… (try ${tries}/${maxTries})`); setTimeout(attempt, 40); }
+              } else {
+                setStatus(`Searching near ports… (try ${tries}/${maxTries})`);
+                setTimeout(attempt, 40);
+              }
+            }
+          );
+        })();
+      });
+    }
+
+    function showPanorama(panoData){
+      const latLng = panoData.location.latLng;
+      currentActualLatLng = latLng;
+      currentActualName = nearestPortName(latLng) || "Unknown location";
+      pano.setPano(panoData.location.pano);
+      pano.setPov({heading: 0, pitch: 0});
+      pano.setVisible(true);
+      pano.setOptions({ linksControl: true, panControl: true, zoomControl: true, motionTracking: false });
+      setStatus('Explore, then click the globe to place your guess.');
+      document.getElementById('btnGuess').disabled = !currentGuessLatLng;
+      loadingNew = false;
+    }
+
+    function prepareNextRound(){
+      currentGuessLatLng = null;
+      document.getElementById('btnGuess').disabled = true;
+      setStatus('Loading a random location near a port…');
+      loadRandomPano().then(showPanorama).catch(()=>{
+        setStatus('Could not find a Street View near ports right now. Try again.');
+      });
+    }
+
+    /* === EXACT BEHAVIOR CHANGE: show ONLY the two current-round points and fit them to the very edges === */
+    function revealResult(){
+      // 1) Completely reset the results map container so NOTHING persists from past rounds.
+      const mapContainer = document.getElementById('resultMap');
+      mapContainer.innerHTML = ""; // nukes prior map DOM so old markers/lines cannot affect fit
+
+      // 2) Create a fresh map instance.
+      resultMap = new google.maps.Map(mapContainer, {
+        mapTypeId: 'terrain',
+        gestureHandling: 'greedy',
+        disableDefaultUI: false
+      });
+
+      // 3) Add ONLY this round's two points and the line between them.
+      new google.maps.Marker({
+        position: currentActualLatLng,
+        map: resultMap,
+        title: 'Actual location',
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 7, strokeWeight: 3, strokeColor: '#34d399', fillColor: '#10b981', fillOpacity: .9 }
+      });
+
+      new google.maps.Marker({
+        position: currentGuessLatLng,
+        map: resultMap,
+        title: 'Your guess',
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, strokeWeight: 3, strokeColor: '#60a5fa', fillColor: '#3b82f6', fillOpacity: .9 }
+      });
+
+      new google.maps.Polyline({
+        map: resultMap,
+        path: [currentGuessLatLng, currentActualLatLng],
+        geodesic: true,
+        strokeWeight: 3,
+        strokeOpacity: .9,
+        strokeColor: '#7dd3fc'
+      });
+
+      // 4) Fit the map to ONLY those two points, with ZERO padding so they sit right at the edges.
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend(currentGuessLatLng);
+      bounds.extend(currentActualLatLng);
+      resultMap.fitBounds(bounds, 0); // <- zero padding = points at edge
+
+      // 5) Update the info line.
+      const locEl = document.getElementById('locationName');
+      if (locEl) locEl.textContent = currentActualName || "Unknown location";
+
+      // 6) Show the overlay.
+      document.getElementById('result').style.display = 'block';
+    }
+
+    function handleGuess(){
+      if (!currentActualLatLng || !currentGuessLatLng) return;
+      const km = haversineKm(currentGuessLatLng, currentActualLatLng);
+      const pts = scoreFromDistanceKm(km);
+      totalScore += pts;
+
+      document.getElementById('distanceText').textContent = `${km.toFixed(1)} km away`;
+      document.getElementById('scoreThisRound').textContent = pts.toString();
+      document.getElementById('roundSummary').textContent = `Round ${roundNow} of ${roundMax} · Total ${totalScore} pts`;
+      document.getElementById('totalScore').textContent = totalScore.toString();
+      revealResult();
+    }
+
+    function endOrNext(){
+      document.getElementById('result').style.display = 'none';
+      if (roundNow >= roundMax){
+        setStatus('Game over! Start a new game?');
+        document.getElementById('btnNew').style.display = 'inline-block';
+        document.getElementById('btnGuess').disabled = true;
+
+        setTimeout(async () => {
+          try{
+            await refreshLeaderboard();
+            try{
+              const name = await askForInitials();
+              try{ await saveScore(name, totalScore); } catch(e){ console.error("Save failed:", e); }
+              await refreshLeaderboard(name);
+            }catch(err){
+              // cancelled
+            }
+          }catch(e){ console.error(e); }
+        }, 50);
+
+      } else {
+        roundNow++;
+        document.getElementById('roundNow').textContent = roundNow.toString();
+        prepareNextRound();
+      }
+    }
+
+    function newGame(){
+      totalScore = 0;
+      roundNow = 1;
+      document.getElementById('roundNow').textContent = '1';
+      document.getElementById('totalScore').textContent = '0';
+      document.getElementById('btnNew').style.display = 'none';
+      prepareNextRound();
+    }
+
+    /* ======= Toggle mini map ======= */
+    function setMiniMapVisible(visible){
+      const wrap = document.getElementById('globeWrap');
+      const btn = document.getElementById('toggleMapBtn');
+      miniMapVisible = visible;
+      if (visible){
+        wrap.style.display = 'block';
+        document.body.classList.remove('mapHidden');
+        btn.textContent = 'Hide Map';
+        btn.title = 'Hide mini map';
+        btn.setAttribute('aria-pressed','false');
+        setTimeout(()=> google.maps.event.trigger(guessMap, 'resize'), 50);
+      } else {
+        wrap.style.display = 'none';
+        document.body.classList.add('mapHidden');
+        btn.textContent = 'Show Map';
+        btn.title = 'Show mini map';
+        btn.setAttribute('aria-pressed','true');
+      }
+    }
+
+    /* ======= Maps/Street View Setup ======= */
+    function initMapsAndUI(){
+      svService = new google.maps.StreetViewService();
+      pano = new google.maps.StreetViewPanorama(document.getElementById('pano'), {
+        addressControl: false,
+        motionTracking: false,
+        panControl: true,
+        showRoadLabels: false,
+        zoomControl: true,
+        fullscreenControl: false,
+      });
+      guessMap = new google.maps.Map(document.getElementById('globe'), {
+        center: {lat: 15, lng: 0},
+        zoom: 2,
+        minZoom: 1,
+        maxZoom: 5,
+        mapTypeId: 'terrain',
+        disableDefaultUI: true,
+        streetViewControl: false,
+        gestureHandling: 'greedy',
+        isFractionalZoomEnabled: true,
+        backgroundColor: '#0b0f1f'
+      });
+      let guessMarker = null;
+      guessMap.addListener('click', (e)=>{
+        currentGuessLatLng = e.latLng;
+        document.getElementById('btnGuess').disabled = loadingNew || !currentGuessLatLng;
+        if (!guessMarker){
+          guessMarker = new google.maps.Marker({
+            position: e.latLng, map: guessMap, draggable: true, title: 'Your guess'
+          });
+          guessMarker.addListener('dragend', (ev)=>{ currentGuessLatLng = ev.latLng; });
+        } else {
+          guessMarker.setMap(guessMap);
+          guessMarker.setPosition(e.latLng);
+        }
+      });
+      document.getElementById('btnGuess').addEventListener('click', handleGuess);
+      document.getElementById('btnSkip').addEventListener('click', ()=>{
+        setStatus('Skipping… finding a new place near a port.');
+        prepareNextRound();
+      });
+      document.getElementById('btnNext').addEventListener('click', endOrNext);
+      document.getElementById('btnNew').addEventListener('click', newGame);
+      document.getElementById('toggleMapBtn').addEventListener('click', ()=>{
+        setMiniMapVisible(!miniMapVisible);
+      });
+
+      initInitialsUI();
+      prepareNextRound();
+      refreshLeaderboard();
+    }
+
+    window.initGame = function(){
+      document.getElementById('roundMax').textContent = String(roundMax);
+      initMapsAndUI();
+    };
+  </script>
+</body>
+</html>
 
