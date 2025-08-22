@@ -1,4 +1,4 @@
-I'm<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -253,66 +253,58 @@ I'm<!DOCTYPE html>
   </script>
 
   <script>
-    
-      /* --- Hardening: neutralize map/watermark anchor clicks inside the pano --- */
-      function neutralizeGoogleLinks(){
-        try{
-          const container = document.getElementById('pano');
-          if(!container) return;
-          const anchors = container.querySelectorAll('a[href*="google."] , a[href*="maps.google"] , a[href*="google.com"]');
-          anchors.forEach(a => {
-            a.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); return false; }, true);
-          });
-        }catch(e){}
-      }
-      setInterval(neutralizeGoogleLinks, 800);
+    /* --- Neutralize map/watermark anchor clicks inside the pano --- */
+    function neutralizeGoogleLinks(){
+      try{
+        const container = document.getElementById('pano');
+        if(!container) return;
+        const anchors = container.querySelectorAll('a[href*="google."] , a[href*="maps.google"] , a[href*="google.com"]');
+        anchors.forEach(a => {
+          a.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); return false; }, true);
+        });
+      }catch(e){}
+    }
+    setInterval(neutralizeGoogleLinks, 800);
 
-      /* --- Strong protection: prevent hover from showing coordinates in status/tooltip --- */
-      function cloakGoogleAnchors(){
-        try{
-          // look inside pano and common control roots
-          const roots = [
-            document.getElementById('pano'),
-            ...document.querySelectorAll('.gm-style, .gm-style-cc, .gmnoprint')
-          ].filter(Boolean);
-          roots.forEach(root => {
-            root.querySelectorAll('a').forEach(a => {
-              const href = a.getAttribute('href') || '';
-              if (/google\./i.test(href) || /maps\.google/i.test(href)){
-                // remove href so browsers can't show it in the status bar
-                if (!a.hasAttribute('data-ghost-href')) {
-                  a.setAttribute('data-ghost-href', href);
-                }
-                if (a.hasAttribute('href')) a.removeAttribute('href');
-                // remove tooltips
-                if (a.hasAttribute('title')) a.removeAttribute('title');
-                a.setAttribute('aria-label','');
-                // make it inert to any pointer interaction
-                a.style.pointerEvents = 'none';
-                a.style.cursor = 'default';
+    function cloakGoogleAnchors(){
+      try{
+        const roots = [
+          document.getElementById('pano'),
+          ...document.querySelectorAll('.gm-style, .gm-style-cc, .gmnoprint')
+        ].filter(Boolean);
+        roots.forEach(root => {
+          root.querySelectorAll('a').forEach(a => {
+            const href = a.getAttribute('href') || '';
+            if (/google\./i.test(href) || /maps\.google/i.test(href)){
+              if (!a.hasAttribute('data-ghost-href')) {
+                a.setAttribute('data-ghost-href', href);
               }
-            });
+              if (a.hasAttribute('href')) a.removeAttribute('href');
+              if (a.hasAttribute('title')) a.removeAttribute('title');
+              a.setAttribute('aria-label','');
+              a.style.pointerEvents = 'none';
+              a.style.cursor = 'default';
+            }
           });
-        }catch(e){ /* no-op */ }
-      }
-      // Observe pano for re-renders and apply cloak
-      function observeGoogleForCloak(){
-        try{
-          const target = document.getElementById('pano');
-          if(!target) return;
-          const obs = new MutationObserver(() => cloakGoogleAnchors());
-          obs.observe(target, { subtree: true, childList: true, attributes: true });
-        }catch(e){ /* no-op */ }
-      }
-      cloakGoogleAnchors();
-      observeGoogleForCloak();
-      setInterval(cloakGoogleAnchors, 1000);
-
+        });
+      }catch(e){}
+    }
+    function observeGoogleForCloak(){
+      try{
+        const target = document.getElementById('pano');
+        if(!target) return;
+        const obs = new MutationObserver(() => cloakGoogleAnchors());
+        obs.observe(target, { subtree: true, childList: true, attributes: true });
+      }catch(e){}
+    }
+    cloakGoogleAnchors();
+    observeGoogleForCloak();
+    setInterval(cloakGoogleAnchors, 1000);
 
     /* ======= Game State ======= */
-    let pano, svService, guessMap, resultMap, guessMarker, actualMarker, linkLine;
+    let pano, svService, guessMap, resultMap;
     let currentActualLatLng = null;
-    let currentActualName = null; // NEW: store nearest port name for the revealed location
+    let currentActualName = null;
     let currentGuessLatLng = null;
     let totalScore = 0;
     let roundNow = 1;
@@ -321,8 +313,8 @@ I'm<!DOCTYPE html>
     let miniMapVisible = true;
 
     /* ======= Supabase  */
-    const SUPABASE_URL = "https://ckajnizstineqlvwmelc.supabase.co"; // <-- replace
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrYWpuaXpzdGluZXFsdndtZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0NzY3OTUsImV4cCI6MjA3MTA1Mjc5NX0.UbexwbgzhICpCw5tUlwKH-sRvx6aFBWXOBFYbycbUKw";                // <-- replace (anon public)
+    const SUPABASE_URL = "https://ckajnizstineqlvwmelc.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrYWpuaXpzdGluZXFsdndtZWxjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU0NzY3OTUsImV4cCI6MjA3MTA1Mjc5NX0.UbexwbgzhICpCw5tUlwKH-sRvx6aFBWXOBFYbycbUKw";
     const TOP_LIMIT = 10;
     const NAME_LEN = 3;
 
@@ -384,7 +376,6 @@ I'm<!DOCTYPE html>
     /* ======= Initials Modal Logic ======= */
     let modalOpen = false;
     let initials = ["","",""];
-    let focusIndex = 0;
     let onSubmitCallback = null;
     let onCancelCallback = null;
 
@@ -399,13 +390,10 @@ I'm<!DOCTYPE html>
     function openInitialsModal(defaultValue=""){
       initials = sanitizeName(defaultValue || localStorage.getItem("playerName3") || "").split("");
       while(initials.length<3) initials.push("");
-      focusIndex = initials.findIndex(ch => ch==="");
-      if (focusIndex === -1) focusIndex = 2;
       updateSlots();
       document.getElementById("initialsMsg").textContent = "";
       document.getElementById("initialsModal").style.display = "flex";
       modalOpen = true;
-      // Show/refresh leaderboard only while entering initials
       refreshLeaderboard();
     }
     function closeInitialsModal(){
@@ -434,7 +422,6 @@ I'm<!DOCTYPE html>
 
     function buildKeypad(){
       const keys = [];
-      // A-Z then 0-9
       for(let i=65;i<=90;i++) keys.push(String.fromCharCode(i));
       for(let i=48;i<=57;i++) keys.push(String.fromCharCode(i));
       const pad = document.getElementById("keypad");
@@ -446,7 +433,6 @@ I'm<!DOCTYPE html>
         b.addEventListener("click", ()=>appendChar(k));
         pad.appendChild(b);
       });
-      // special keys
       const bk = document.createElement("div");
       bk.className="key wide";
       bk.textContent="⌫ Back";
@@ -479,7 +465,6 @@ I'm<!DOCTYPE html>
         closeInitialsModal();
         if (typeof onCancelCallback === "function") onCancelCallback();
       });
-      // Basic keyboard support
       window.addEventListener("keydown", (e)=>{
         if(!modalOpen) return;
         if(e.key==="Escape"){ closeInitialsModal(); if(onCancelCallback) onCancelCallback(); }
@@ -1042,14 +1027,13 @@ I'm<!DOCTYPE html>
     // constants
     const EARTH_R_KM = 6371;
     const LIMIT_MI = 1;
-    const LIMIT_KM = LIMIT_MI * 1.609344; // 24.14016 km
-    const SEARCH_RADIUS_M = 2500; // Street View search radius around candidate point
+    const LIMIT_KM = LIMIT_MI * 1.609344;
+    const SEARCH_RADIUS_M = 2500;
 
     /* ======= Utilities ======= */
     function rand(min, max){ return Math.random()*(max-min)+min; }
     function toRad(d){ return d*Math.PI/180; }
     function toDeg(r){ return r*180/Math.PI; }
-    // Haversine distance in km
     function haversineKm(a, b){
       const dLat = toRad(b.lat()-a.lat());
       const dLng = toRad(b.lng()-a.lng());
@@ -1058,7 +1042,6 @@ I'm<!DOCTYPE html>
       const c = 2*Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
       return EARTH_R_KM*c;
     }
-    // Offset a lat/lng by distance (km) and bearing (deg)
     function offsetLatLng(lat, lng, distKm, bearingDeg){
       const δ = distKm / EARTH_R_KM;
       const θ = toRad(bearingDeg);
@@ -1075,20 +1058,17 @@ I'm<!DOCTYPE html>
       lng2 = ((lng2 + 540) % 360) - 180;
       return new google.maps.LatLng(toDeg(φ2), lng2);
     }
-    // Random point within circle radius (uniform by area)
     function randomPointWithin(lat, lng, radiusKm){
       const r = radiusKm * Math.sqrt(Math.random());
       const bearing = rand(0, 360);
       return offsetLatLng(lat, lng, r, bearing);
     }
-    // Score function
     function scoreFromDistanceKm(d){
       const s = 5000*Math.exp(-d/2000);
       return Math.max(0, Math.round(s));
     }
     function setStatus(txt){ document.getElementById('status').textContent = txt; }
 
-    // Find nearest port (within LIMIT_KM); returns its name or null
     function nearestPortName(latLng){
       let best = null;
       let bestD = Infinity;
@@ -1102,7 +1082,7 @@ I'm<!DOCTYPE html>
       return bestD <= LIMIT_KM ? (best?.name || null) : null;
     }
 
-    /* ======= Core Flow (restricted to within 15 miles of ports) ======= */
+    /* ======= Core Flow (restricted to within port radius) ======= */
     async function loadRandomPano(maxTries=60){
       loadingNew = true;
       setStatus('Finding a Street View spot near a cruise port…');
@@ -1137,7 +1117,7 @@ I'm<!DOCTYPE html>
     function showPanorama(panoData){
       const latLng = panoData.location.latLng;
       currentActualLatLng = latLng;
-      currentActualName = nearestPortName(latLng) || "Unknown location"; // NEW: set displayed name
+      currentActualName = nearestPortName(latLng) || "Unknown location";
       pano.setPano(panoData.location.pano);
       pano.setPov({heading: 0, pitch: 0});
       pano.setVisible(true);
@@ -1148,9 +1128,6 @@ I'm<!DOCTYPE html>
     }
 
     function prepareNextRound(){
-      if (guessMarker){ guessMarker.setMap(null); guessMarker = null; }
-      if (actualMarker){ actualMarker.setMap(null); actualMarker = null; }
-      if (linkLine){ linkLine.setMap(null); linkLine = null; }
       currentGuessLatLng = null;
       document.getElementById('btnGuess').disabled = true;
       setStatus('Loading a random location near a port…');
@@ -1159,35 +1136,35 @@ I'm<!DOCTYPE html>
       });
     }
 
+    /* === EXACT BEHAVIOR CHANGE: show ONLY the two current-round points and fit them to the very edges === */
     function revealResult(){
-      if (!resultMap){
-        resultMap = new google.maps.Map(document.getElementById('resultMap'), {
-          zoom: 3,
-          center: currentActualLatLng,
-          mapTypeId: 'terrain',
-          gestureHandling: 'greedy',
-          disableDefaultUI: false
-        });
-      }
-      if (actualMarker){ actualMarker.setMap(null); }
-      if (guessMarker && guessMarker.getMap() === resultMap){ guessMarker.setMap(null); }
+      // 1) Completely reset the results map container so NOTHING persists from past rounds.
+      const mapContainer = document.getElementById('resultMap');
+      mapContainer.innerHTML = ""; // nukes prior map DOM so old markers/lines cannot affect fit
 
-      actualMarker = new google.maps.Marker({
+      // 2) Create a fresh map instance.
+      resultMap = new google.maps.Map(mapContainer, {
+        mapTypeId: 'terrain',
+        gestureHandling: 'greedy',
+        disableDefaultUI: false
+      });
+
+      // 3) Add ONLY this round's two points and the line between them.
+      new google.maps.Marker({
         position: currentActualLatLng,
         map: resultMap,
         title: 'Actual location',
         icon: { path: google.maps.SymbolPath.CIRCLE, scale: 7, strokeWeight: 3, strokeColor: '#34d399', fillColor: '#10b981', fillOpacity: .9 }
       });
 
-      const guessMarkerResult = new google.maps.Marker({
+      new google.maps.Marker({
         position: currentGuessLatLng,
         map: resultMap,
         title: 'Your guess',
         icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, strokeWeight: 3, strokeColor: '#60a5fa', fillColor: '#3b82f6', fillOpacity: .9 }
       });
 
-      if (linkLine){ linkLine.setMap(null); }
-      linkLine = new google.maps.Polyline({
+      new google.maps.Polyline({
         map: resultMap,
         path: [currentGuessLatLng, currentActualLatLng],
         geodesic: true,
@@ -1196,14 +1173,17 @@ I'm<!DOCTYPE html>
         strokeColor: '#7dd3fc'
       });
 
+      // 4) Fit the map to ONLY those two points, with ZERO padding so they sit right at the edges.
       const bounds = new google.maps.LatLngBounds();
-      bounds.extend(currentGuessLatLng); bounds.extend(currentActualLatLng);
-      resultMap.fitBounds(bounds, 80);
+      bounds.extend(currentGuessLatLng);
+      bounds.extend(currentActualLatLng);
+      resultMap.fitBounds(bounds, 0); // <- zero padding = points at edge
 
-      // NEW: show location name in the results line
+      // 5) Update the info line.
       const locEl = document.getElementById('locationName');
       if (locEl) locEl.textContent = currentActualName || "Unknown location";
 
+      // 6) Show the overlay.
       document.getElementById('result').style.display = 'block';
     }
 
@@ -1227,7 +1207,6 @@ I'm<!DOCTYPE html>
         document.getElementById('btnNew').style.display = 'inline-block';
         document.getElementById('btnGuess').disabled = true;
 
-        // === Leaderboard save flow via modal (leaderboard visible only now) ===
         setTimeout(async () => {
           try{
             await refreshLeaderboard();
@@ -1236,7 +1215,7 @@ I'm<!DOCTYPE html>
               try{ await saveScore(name, totalScore); } catch(e){ console.error("Save failed:", e); }
               await refreshLeaderboard(name);
             }catch(err){
-              // cancelled; do nothing
+              // cancelled
             }
           }catch(e){ console.error(e); }
         }, 50);
@@ -1301,6 +1280,7 @@ I'm<!DOCTYPE html>
         isFractionalZoomEnabled: true,
         backgroundColor: '#0b0f1f'
       });
+      let guessMarker = null;
       guessMap.addListener('click', (e)=>{
         currentGuessLatLng = e.latLng;
         document.getElementById('btnGuess').disabled = loadingNew || !currentGuessLatLng;
@@ -1327,7 +1307,6 @@ I'm<!DOCTYPE html>
 
       initInitialsUI();
       prepareNextRound();
-      // We can still prefetch leaderboard data (it will only be visible in the modal)
       refreshLeaderboard();
     }
 
